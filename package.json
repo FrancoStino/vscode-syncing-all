@@ -1,7 +1,7 @@
 {
     "name": "syncing-all-ide",
-    "displayName": "%displayName%",
-    "description": "%description%",
+    "displayName": "Syncing All IDE",
+    "description": "Syncing All IDE",
     "version": "0.0.1",
     "publisher": "DavideLadisa",
     "author": {
