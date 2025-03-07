@@ -3,8 +3,7 @@ import * as junk from "junk";
 import * as micromatch from "micromatch";
 import * as path from "path";
 
-import
-{
+import {
     CONFIGURATION_EXCLUDED_EXTENSIONS,
     CONFIGURATION_EXCLUDED_SETTINGS,
     CONFIGURATION_KEY,
@@ -106,6 +105,17 @@ export class VSCodeSetting
             {
                 // Attention: Snippets may be empty.
                 tempSettings = await this._getSnippets(this._env.snippetsDirectory);
+            }
+            else if (settingType === SettingType.StateDB)
+            {
+                // Handle state.vscdb file
+                localFilename = "state.vscdb";
+                remoteFilename = localFilename;
+                tempSettings = [{
+                    localFilePath: this._env.stateDBPath,
+                    remoteFilename,
+                    type: settingType
+                }];
             }
             else
             {
@@ -431,6 +441,12 @@ export class VSCodeSetting
 
                     lastModified = await readLastModified(this._env.extensionsDirectory);
                 }
+                else if (setting.type === SettingType.StateDB)
+                {
+                    // Handle state.vscdb as binary file
+                    content = await fs.readFile(setting.localFilePath, "base64");
+                    lastModified = await readLastModified(setting.localFilePath);
+                }
                 else
                 {
                     content = await fs.readFile(setting.localFilePath, "utf8");
@@ -475,6 +491,15 @@ export class VSCodeSetting
             // Sync extensions.
             const extensions: IExtension[] = parse(setting.content ?? "[]");
             result = await this._ext.sync(extensions, true);
+        }
+        else if (setting.type === SettingType.StateDB)
+        {
+            // Save state.vscdb as binary file
+            if (setting.content)
+            {
+                await fs.writeFile(setting.localFilePath, Buffer.from(setting.content, "base64"));
+            }
+            result = { setting };
         }
         else
         {

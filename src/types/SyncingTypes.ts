@@ -33,7 +33,8 @@ export enum SettingType
     Keybindings = "keybindings",
     Locale = "locale",
     Settings = "settings",
-    Snippets = "snippets"
+    Snippets = "snippets",
+    StateDB = "state"
 }
 
 /**

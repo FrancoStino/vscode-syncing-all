@@ -2,24 +2,24 @@
     "name": "syncing",
     "displayName": "%displayName%",
     "description": "%description%",
-    "version": "3.3.9",
-    "publisher": "nonoroazoro",
+    "version": "0.0.1",
+    "publisher": "DavideLadisa",
     "author": {
-        "email": "xiaochao.k@gmail.com",
-        "name": "nonoroazoro",
-        "url": "https://github.com/nonoroazoro"
+        "email": "info@davideladisa.it",
+        "name": "Davide Ladisa",
+        "url": "https://github.com/DavideLadisa"
     },
-    "homepage": "https://github.com/nonoroazoro/vscode-syncing",
+    "homepage": "https://github.com/DavideLadisa/vscode-syncing",
     "license": "(MIT AND 996ICU)",
     "main": "dist/extension",
     "icon": "resources/logo.png",
     "repository": {
         "type": "git",
-        "url": "https://github.com/nonoroazoro/vscode-syncing"
+        "url": "https://github.com/FrancoStino/vscode-syncing-all"
     },
     "bugs": {
-        "url": "https://github.com/nonoroazoro/vscode-syncing/issues",
-        "email": "xiaochao.k@gmail.com"
+        "url": "https://github.com/FrancoStino/vscode-syncing-all/issues",
+        "email": "info@davideladisa.it"
     },
     "engines": {
         "vscode": "^1.37.0"
@@ -35,7 +35,10 @@
         "vscode-syncing"
     ],
     "activationEvents": [
-        "*"
+        "onCommand:syncing.uploadSettings",
+        "onCommand:syncing.downloadSettings",
+        "onCommand:syncing.openSettings",
+        "onUri"
     ],
     "contributes": {
         "commands": [
@@ -86,6 +89,11 @@
                         "type": "boolean",
                         "default": true,
                         "description": "%configuration.syncing.separateKeybindings%"
+                    },
+                    "syncing.oauth.state": {
+                        "type": "string",
+                        "default": "",
+                        "description": "Internal use: OAuth state for CSRF protection"
                     }
                 }
             }
@@ -120,6 +128,7 @@
         "test:cov": "npm run cleanCov && npm test -- --coverage"
     },
     "dependencies": {
+        "@octokit/auth-app": "^7.1.5",
         "@octokit/rest": "^19.0.11",
         "chokidar": "^3.5.3",
         "date-fns": "^2.30.0",
@@ -143,7 +152,7 @@
         "@types/lodash.pick": "^4.4.7",
         "@types/micromatch": "^4.0.3",
         "@types/node": "^10.11.0",
-        "@types/vscode": "^1.37.0",
+        "@types/vscode": "^1.85.0",
         "@typescript-eslint/eslint-plugin": "^6.7.5",
         "@typescript-eslint/parser": "^6.7.5",
         "cross-env": "^7.0.3",
@@ -163,5 +172,6 @@
         "webpack": "^5.88.2",
         "webpack-cli": "^5.1.4",
         "webpackbar": "^5.0.2"
-    }
+    },
+    "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

@@ -66,6 +66,11 @@ export class Environment
      */
     public readonly extensionsFilePath: string;
 
+    /**
+     * Gets the full path of VSCode's `state.vscdb` file.
+     */
+    public readonly stateDBPath: string;
+
     private static _instance: Environment;
 
     private constructor()
@@ -82,6 +87,7 @@ export class Environment
         this.snippetsDirectory = this.getSettingsFilePath("snippets");
         this.obsoleteFilePath = path.join(this.extensionsDirectory, ".obsolete");
         this.extensionsFilePath = path.join(this.extensionsDirectory, "extensions.json");
+        this.stateDBPath = path.join(this.userDirectory, "globalStorage", "state.vscdb");
     }
 
     /**

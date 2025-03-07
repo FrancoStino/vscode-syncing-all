@@ -8,8 +8,8 @@ import { SettingType, VSCodeEdition } from "../types";
 export const VSCODE_SETTINGS_LIST = [
     SettingType.Settings,
     SettingType.Keybindings,
-    SettingType.Locale,
     SettingType.Snippets,
+    SettingType.StateDB,
     SettingType.Extensions
 ];
 

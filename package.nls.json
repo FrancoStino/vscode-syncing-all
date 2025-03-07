@@ -67,5 +67,6 @@
     "pokaYoke.continue.download": "Continue to download",
     "pokaYoke.continue.download.message": "A lot of changes have been made since your last sync. Are you sure to OVERWRITE THE LOCAL SETTINGS?",
     "pokaYoke.continue.upload": "Continue to upload",
-    "pokaYoke.continue.upload.message": "A lot of changes have been made since your last sync. Are you sure to OVERWRITE THE REMOTE SETTINGS?"
+    "pokaYoke.continue.upload.message": "A lot of changes have been made since your last sync. Are you sure to OVERWRITE THE REMOTE SETTINGS?",
+    "error.github.oauth.failed": "GitHub OAuth authentication failed: {0}"
 }
