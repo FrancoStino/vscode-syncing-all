@@ -99,6 +99,8 @@ export interface IExtension
      * The extension's download url in marketplace.
      */
     downloadURL?: string;
+
+    isActive: boolean;
 }
 
 /**

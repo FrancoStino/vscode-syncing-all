@@ -89,7 +89,6 @@ export class Extension
         // vscode.extensions.all already includes both enabled and disabled extensions
         for (const ext of vscode.extensions.all)
         {
-            console.log(ext);
             if (
                 !excludedPatterns.some((pattern) => micromatch.isMatch(ext.id, pattern, { nocase: true }))
             )
@@ -98,7 +97,8 @@ export class Extension
                     id: ext.id,
                     name: ext.packageJSON.name,
                     publisher: ext.packageJSON.publisher,
-                    version: ext.packageJSON.version
+                    version: ext.packageJSON.version,
+                    isActive: ext.isActive
                 };
                 result.push(item);
             }
