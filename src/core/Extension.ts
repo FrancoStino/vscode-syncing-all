@@ -6,8 +6,7 @@ import * as tmp from "tmp-promise";
 import * as vscode from "vscode";
 
 import { CaseInsensitiveMap, CaseInsensitiveSet } from "../collections";
-import
-{
+import {
     CONFIGURATION_EXCLUDED_EXTENSIONS,
     CONFIGURATION_EXTENSIONS_AUTOUPDATE,
     CONFIGURATION_KEY
@@ -78,19 +77,21 @@ export class Extension
     }
 
     /**
-     * Gets all installed extensions (Disabled extensions aren't included).
-     *
-     * @param excludedPatterns The glob patterns of the extensions that should be excluded.
-     */
+ * Gets all installed extensions including disabled ones.
+ *
+ * @param excludedPatterns The glob patterns of the extensions that should be excluded.
+ */
     public getAll(excludedPatterns: string[] = []): IExtension[]
     {
         let item: IExtension;
         const result: IExtension[] = [];
+
+        // vscode.extensions.all already includes both enabled and disabled extensions
         for (const ext of vscode.extensions.all)
         {
+            console.log(ext);
             if (
-                !ext.packageJSON.isBuiltin
-                && !excludedPatterns.some((pattern) => micromatch.isMatch(ext.id, pattern, { nocase: true }))
+                !excludedPatterns.some((pattern) => micromatch.isMatch(ext.id, pattern, { nocase: true }))
             )
             {
                 item = {
@@ -102,6 +103,7 @@ export class Extension
                 result.push(item);
             }
         }
+
         return result.sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
     }
 
