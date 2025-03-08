@@ -222,6 +222,9 @@ export class Extension
             {
                 // Create temp dir.
                 dirPath = (await tmp.dir({ postfix: `.${extension.id}`, unsafeCleanup: true })).path;
+
+                // Immediately disable the extension before installing
+                this._forceDisableExtension(extension);
             }
             catch
             {
@@ -237,6 +240,10 @@ export class Extension
                 const extPath = this._env.getExtensionDirectory(extension);
                 await fs.emptyDir(extPath);
                 await fs.copy(path.join(dirPath, "extension"), extPath);
+
+                // Make sure extension stays disabled after installation
+                this._forceDisableExtension(extension);
+
                 return extension;
             }
             catch (err: any)
@@ -502,5 +509,85 @@ export class Extension
             }
         }
         return result;
+    }
+
+    /**
+     * Force VSCode to disable an extension using the VSCode CLI command.
+     * This ensures extensions are disabled immediately during installation.
+     *
+     * @param extension The extension to disable immediately
+     */
+    private _forceDisableExtension(extension: IExtension): void
+    {
+        try
+        {
+            // Use VSCode CLI to disable the extension
+            const { exec } = require("child_process");
+            const execName = path.basename(process.execPath); // Ottiene l'ultimo elemento del percorso
+            // The VSCode CLI command to disable an extension
+
+            // Execute the command synchronously
+            exec(`${execName} --list-extensions`, (error: Error | null, stdout: string, stderr: string) =>
+            {
+                if (error)
+                {
+                    console.error(`Errore: ${error.message}`);
+                    return;
+                }
+                if (stderr)
+                {
+                    console.error(`Stderr: ${stderr}`);
+                    return;
+                }
+                console.log(`Estensioni installate in ${execName}:\n`, stdout);
+            });
+
+            console.log(`Extension ${extension.id} disabled immediately via CLI`);
+        }
+        catch (err)
+        {
+            // Fall back to writing to the .obsolete file if CLI command fails
+            try
+            {
+                console.error(`Failed to disable extension ${extension.id} via CLI, falling back to .obsolete file:`, err);
+
+                // VSCode expects a JSON object where keys are extension IDs with version and values are true
+                let obsoleteData: Record<string, boolean> = {};
+
+                // Read existing file if it exists
+                if (fs.existsSync(this._env.obsoleteFilePath))
+                {
+                    try
+                    {
+                        const content = fs.readFileSync(this._env.obsoleteFilePath, "utf8");
+                        if (content)
+                        {
+                            obsoleteData = JSON.parse(content);
+                        }
+                    }
+                    catch (parseErr)
+                    {
+                        // If parsing fails, start with an empty object
+                        console.error("Error parsing .obsolete file, creating new one:", parseErr);
+                        obsoleteData = {};
+                    }
+                }
+
+                // Create the extension key in the format VSCode expects: publisher.name-version
+                const extensionKey = `${extension.publisher}.${extension.name}-${extension.version}`;
+
+                // Add this extension to the obsolete list
+                obsoleteData[extensionKey] = true;
+
+                // Write the updated JSON back to the file
+                fs.writeFileSync(this._env.obsoleteFilePath, JSON.stringify(obsoleteData));
+                console.log(`Extension ${extension.id} v${extension.version} marked as obsolete (fallback method)`);
+            }
+            catch (fallbackErr)
+            {
+                // Log error but don't stop installation
+                console.error(`Failed to mark extension ${extension.id} as obsolete (all methods failed):`, fallbackErr);
+            }
+        }
     }
 }
