@@ -3,7 +3,7 @@ import * as fs from "fs-extra";
 import * as micromatch from "micromatch";
 import * as path from "path";
 import * as tmp from "tmp-promise";
-import * as vscode from "vscode";
+// import * as vscode from "vscode";
 
 import { CaseInsensitiveMap, CaseInsensitiveSet } from "../collections";
 import {
@@ -154,46 +154,19 @@ export class Extension
         // Add, update or remove extensions.
         const { added, updated, removed, total } = diff;
         const result = { extension: {} };
-
-        // Keep track of all added and updated extensions
-        const extensionsToDisable: string[] = [];
-
-        // Modified task definitions to pass extensionsToDisable
         const tasks = [
-            async () =>
-            {
-                const res = await this._addExtensions({
-                    extensions: added,
-                    progress: 0,
-                    total,
-                    showIndicator
-                });
-
-                // Add successfully installed extensions to the list to disable
-                for (const ext of res.added)
-                {
-                    extensionsToDisable.push(ext.id);
-                }
-
-                return res;
-            },
-            async () =>
-            {
-                const res = await this._updateExtensions({
-                    extensions: updated,
-                    progress: added.length,
-                    total,
-                    showIndicator
-                });
-
-                // Add successfully updated extensions to the list to disable
-                for (const ext of res.updated)
-                {
-                    extensionsToDisable.push(ext.id);
-                }
-
-                return res;
-            },
+            this._addExtensions.bind(this, {
+                extensions: added,
+                progress: 0,
+                total,
+                showIndicator
+            }),
+            this._updateExtensions.bind(this, {
+                extensions: updated,
+                progress: added.length,
+                total,
+                showIndicator
+            }),
             this._removeExtensions.bind(this, {
                 extensions: removed,
                 progress: added.length + updated.length,
@@ -208,19 +181,13 @@ export class Extension
             Object.assign(result.extension, value);
         }
 
-        // Disable all added/updated extensions
-        if (extensionsToDisable.length > 0)
-        {
-            await this.disableExtensions(extensionsToDisable);
-        }
-
         if (showIndicator)
         {
             Toast.clearSpinner("");
         }
 
-        // Added since VSCode v1.20, but now we preserve extensions.json
-        await this.removeVSCodeExtensionFiles(false);
+        // Added since VSCode v1.20.
+        await this.removeVSCodeExtensionFiles();
 
         return result as ISyncedItem;
     }
@@ -299,80 +266,6 @@ export class Extension
         {
             throw new Error(localize("error.uninstall.extension", extension.id));
         }
-    }
-
-    /**
-     * Creates or updates VSCode extensions.json file to mark specified extensions as disabled.
-     *
-     * @param extensionIds IDs of extensions to be marked as disabled
-     */
-    public async disableExtensions(extensionIds: string[]): Promise<void>
-    {
-        try
-        {
-            // Create or update extensions.json with explicit typing for arrays
-            const extensionsJson: {
-                recommendations: string[];
-                unwantedRecommendations: string[];
-                disabled: string[];
-                [key: string]: any;
-            } = {
-                recommendations: [],
-                unwantedRecommendations: [],
-                disabled: []
-            };
-
-            // Try to read existing file
-            if (await fs.pathExists(this._env.extensionsFilePath))
-            {
-                try
-                {
-                    // Read existing file and ensure arrays are properly typed
-                    const rawJson = await fs.readJson(this._env.extensionsFilePath);
-
-                    if (rawJson.recommendations && Array.isArray(rawJson.recommendations))
-                    {
-                        extensionsJson.recommendations = rawJson.recommendations;
-                    }
-
-                    if (rawJson.unwantedRecommendations && Array.isArray(rawJson.unwantedRecommendations))
-                    {
-                        extensionsJson.unwantedRecommendations = rawJson.unwantedRecommendations;
-                    }
-
-                    if (rawJson.disabled && Array.isArray(rawJson.disabled))
-                    {
-                        extensionsJson.disabled = rawJson.disabled;
-                    }
-
-                    // Copy any other properties
-                    Object.keys(rawJson).forEach(key =>
-                    {
-                        if (!["recommendations", "unwantedRecommendations", "disabled"].includes(key))
-                        {
-                            extensionsJson[key] = rawJson[key];
-                        }
-                    });
-                }
-                catch
-                {
-                    // Use default if file exists but is invalid
-                }
-            }
-
-            // Add new extension IDs to disabled list (avoiding duplicates)
-            for (const id of extensionIds)
-            {
-                if (!extensionsJson.disabled.includes(id))
-                {
-                    extensionsJson.disabled.push(id);
-                }
-            }
-
-            // Write updated file
-            await fs.outputJson(this._env.extensionsFilePath, extensionsJson, { spaces: 4 });
-        }
-        catch { }
     }
 
     /**
