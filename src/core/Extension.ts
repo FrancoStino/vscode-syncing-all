@@ -89,7 +89,6 @@ export class Extension
         // vscode.extensions.all already includes both enabled and disabled extensions
         for (const ext of vscode.extensions.all.filter(extension => !extension.id.startsWith("vscode.")))
         {
-            console.log(ext);
             if (
                 !excludedPatterns.some((pattern) => micromatch.isMatch(ext.id, pattern, { nocase: true }))
             )
@@ -105,6 +104,7 @@ export class Extension
             }
         }
 
+        console.log("Conto", result.length);
         return result.sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
     }
 
