@@ -4,6 +4,7 @@
     "description": "Syncing All IDE",
     "version": "0.0.2",
     "publisher": "DavideLadisa",
+    "preview": true,
     "author": {
         "email": "info@davideladisa.it",
         "name": "Davide Ladisa",
@@ -115,8 +116,8 @@
     },
     "scripts": {
         "prepare": "husky install",
-        "vscode:prepublish": "npm run build",
-        "prebuild": "npm run clean && npm run cleanCov",
+        "vscode:prepublish": "yarn build",
+        "prebuild": "yarn clean && yarn cleanCov",
         "build": "cross-env NODE_ENV=production webpack --config ./scripts/webpack.config.prod.js",
         "build:ts": "tsc -p ./tsconfig.json",
         "watch": "tsc -p ./tsconfig.json -w",
@@ -124,8 +125,8 @@
         "cleanCov": "rimraf @coverage",
         "upgradepackages": "./scripts/upgrade_packages.sh",
         "test": "jest --config ./scripts/jest.config.js",
-        "test:watch": "npm test -- --watch",
-        "test:cov": "npm run cleanCov && npm test -- --coverage"
+        "test:watch": "yarn test --watch",
+        "test:cov": "yarn cleanCov && yarn test --coverage"
     },
     "dependencies": {
         "@octokit/auth-app": "^7.1.5",
