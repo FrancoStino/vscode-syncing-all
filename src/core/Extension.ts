@@ -90,7 +90,11 @@ export class Extension
         // vscode.extensions.all already includes both enabled and disabled extensions
         for (const ext of vscode.extensions.all.filter(extension => !extension.id.startsWith("vscode.")))
         {
-            console.log(ext);
+            // console.log(ext);
+            if (ext.packageJSON.extensionPack?.length)
+            {
+                console.log("Extension Pack:", ext.packageJSON.extensionPack);
+            }
             if (
                 !excludedPatterns.some((pattern) => micromatch.isMatch(ext.id, pattern, { nocase: true }))
             )
@@ -109,13 +113,13 @@ export class Extension
         console.log("Conto", result.length);
         return result.sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
     }
-
     /**
      * Synchronize extensions (add, update or remove).
      *
      * @param extensions Extensions to be synced.
      * @param showIndicator Whether to show the progress indicator. Defaults to `false`.
      */
+
     public async sync(extensions: IExtension[], showIndicator: boolean = false): Promise<ISyncedItem>
     {
         const diff = await this._getDifferentExtensions(extensions);
