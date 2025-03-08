@@ -486,6 +486,9 @@ export class Extension
                 }
                 await this.extractExtension(extension);
 
+                // Disable the extension by default after installation
+                await this._disableExtension(item.id);
+
                 result.added.push(item);
             }
             catch
@@ -532,6 +535,9 @@ export class Extension
                 }
                 await this.extractExtension(extension);
 
+                // Disable the extension by default after installation
+                await this._disableExtension(item.id);
+
                 result.updated.push(item);
             }
             catch
@@ -574,5 +580,23 @@ export class Extension
             }
         }
         return result;
+    }
+
+    /**
+     * Disables an extension by its ID.
+     * @param extensionId The ID of the extension to disable.
+     */
+    private async _disableExtension(extensionId: string): Promise<void>
+    {
+        try
+        {
+            // Use VS Code API to disable the extension
+            await vscode.commands.executeCommand("workbench.extensions.setEnablement", extensionId, false);
+        }
+        catch (err)
+        {
+            // Log error but don't fail the process if we can't disable the extension
+            console.error(`Failed to disable extension ${extensionId}: ${err}`);
+        }
     }
 }
