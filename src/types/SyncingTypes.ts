@@ -100,7 +100,7 @@ export interface IExtension
      */
     downloadURL?: string;
 
-    isActive: boolean;
+    // isActive: boolean;
 }
 
 /**
