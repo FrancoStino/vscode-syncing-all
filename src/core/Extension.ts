@@ -83,34 +83,61 @@ export class Extension
  */
     public getAll(excludedPatterns: string[] = []): IExtension[]
     {
-        let item: IExtension;
         const result: IExtension[] = [];
-        console.log("Conto tutto", vscode.extensions.all.length);
 
-        // vscode.extensions.all already includes both enabled and disabled extensions
-        for (const ext of vscode.extensions.all.filter(extension => !extension.id.startsWith("vscode.")))
+        try
         {
-            // console.log(ext);
-            if (ext.packageJSON.extensionPack?.length)
+            // Check if extensions.json exists
+            if (fs.existsSync(this._env.extensionsFilePath))
             {
-                console.log("Extension Pack:", ext.packageJSON.extensionPack);
-            }
-            if (
-                !excludedPatterns.some((pattern) => micromatch.isMatch(ext.id, pattern, { nocase: true }))
-            )
-            {
-                item = {
-                    id: ext.id,
-                    name: ext.packageJSON.name,
-                    publisher: ext.packageJSON.publisher,
-                    version: ext.packageJSON.version
-                    // isActive: ext.isActive
-                };
-                result.push(item);
+                // Read and parse extensions.json
+                const extensionsJson = fs.readJSONSync(this._env.extensionsFilePath);
+
+                // Process extensions array based on structure from jq command:
+                // .[] | .identifier.id + " (v" + .version + ")"
+                if (Array.isArray(extensionsJson))
+                {
+                    for (const ext of extensionsJson)
+                    {
+                        if (ext && ext.identifier && ext.identifier.id)
+                        {
+                            const id = ext.identifier.id;
+                            const version = ext.version || "0.0.0"; // Default version if not specified
+
+                            // Skip VSCode built-in extensions
+                            if (id.startsWith("vscode."))
+                            {
+                                continue;
+                            }
+
+                            // Apply excluded patterns filter
+                            if (excludedPatterns.some((pattern) => micromatch.isMatch(id, pattern, { nocase: true })))
+                            {
+                                continue;
+                            }
+
+                            // Extract publisher and name from id (format: publisher.name)
+                            const parts = id.split(".");
+                            const publisher = parts[0] || "";
+                            const name = parts.slice(1).join(".") || "";
+
+                            result.push({
+                                id,
+                                name,
+                                publisher,
+                                version
+                            });
+                        }
+                    }
+                }
             }
         }
+        catch (error)
+        {
+            console.error("Error reading extensions.json:", error);
+        }
 
-        console.log("Conto", result.length);
+        console.log("Extensions count:", result.length);
         return result.sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
     }
     /**
