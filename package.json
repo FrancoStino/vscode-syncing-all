@@ -143,6 +143,7 @@
         "lodash.pick": "^4.4.0",
         "micromatch": "^4.0.5",
         "semver": "^7.5.4",
+        "sqlite3": "^5.1.7",
         "tmp-promise": "^3.0.3",
         "tslib": "^2.6.2"
     },

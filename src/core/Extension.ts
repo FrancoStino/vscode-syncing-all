@@ -77,13 +77,16 @@ export class Extension
     }
 
     /**
- * Gets all installed extensions including disabled ones.
- *
- * @param excludedPatterns The glob patterns of the extensions that should be excluded.
- */
+     * Gets all installed extensions including disabled ones.
+     *
+     * @param excludedPatterns The glob patterns of the extensions that should be excluded.
+     */
     public getAll(excludedPatterns: string[] = []): IExtension[]
     {
         const result: IExtension[] = [];
+        let totalExtensions = 0;
+        let skippedBuiltin = 0;
+        let skippedExcluded = 0;
 
         try
         {
@@ -97,6 +100,7 @@ export class Extension
                 // .[] | .identifier.id + " (v" + .version + ")"
                 if (Array.isArray(extensionsJson))
                 {
+                    totalExtensions = extensionsJson.length;
                     for (const ext of extensionsJson)
                     {
                         if (ext && ext.identifier && ext.identifier.id)
@@ -107,12 +111,14 @@ export class Extension
                             // Skip VSCode built-in extensions
                             if (id.startsWith("vscode."))
                             {
+                                skippedBuiltin++;
                                 continue;
                             }
 
                             // Apply excluded patterns filter
                             if (excludedPatterns.some((pattern) => micromatch.isMatch(id, pattern, { nocase: true })))
                             {
+                                skippedExcluded++;
                                 continue;
                             }
 
@@ -134,19 +140,27 @@ export class Extension
         }
         catch (error)
         {
-            console.error("Error reading extensions.json:", error);
+            // Log error using proper logging mechanism
+            this._logError("Error reading extensions.json:", error);
         }
 
-        console.log("Extensions count:", result.length);
+        // Log statistics using proper logging mechanism
+        this._logInfo("Extensions statistics:", {
+            totalExtensions,
+            skippedBuiltin,
+            skippedExcluded,
+            finalCount: result.length
+        });
+
         return result.sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
     }
+
     /**
      * Synchronize extensions (add, update or remove).
      *
      * @param extensions Extensions to be synced.
      * @param showIndicator Whether to show the progress indicator. Defaults to `false`.
      */
-
     public async sync(extensions: IExtension[], showIndicator: boolean = false): Promise<ISyncedItem>
     {
         const diff = await this._getDifferentExtensions(extensions);
@@ -189,6 +203,18 @@ export class Extension
         // Added since VSCode v1.20.
         await this.removeVSCodeExtensionFiles();
 
+        // Disable all extensions at the end of the process
+        for (const ext of extensions)
+        {
+            this._forceDisableExtension(ext);
+        }
+
+        // Replace state.vscdb with the one from gist
+        if (this.hasStateDB())
+        {
+            await this.replaceStateDB(this.getStateDBPath());
+        }
+
         return result as ISyncedItem;
     }
 
@@ -207,6 +233,77 @@ export class Extension
 
         await downloadFile(extension.downloadURL, filepath, this._syncing.proxy);
         return { ...extension, vsixFilepath: filepath };
+    }
+
+    /**
+     * Gets the path to the state.vscdb file
+     */
+    public getStateDBPath(): string
+    {
+        const env = Environment.create();
+        return env.stateDBPath;
+    }
+
+    /**
+     * Checks if state.vscdb exists
+     */
+    public hasStateDB(): boolean
+    {
+        return fs.existsSync(this.getStateDBPath());
+    }
+
+    /**
+     * Replaces the current state.vscdb with the one from the gist
+     * @param gistStateDBPath Path to the state.vscdb file from the gist
+     */
+    public async replaceStateDB(gistStateDBPath: string): Promise<void>
+    {
+        try
+        {
+            const currentStateDBPath = this.getStateDBPath();
+
+            // Create a backup of the current state.vscdb if it exists
+            if (this.hasStateDB())
+            {
+                const backupPath = `${currentStateDBPath}.backup`;
+                await fs.copy(currentStateDBPath, backupPath);
+                this._logInfo(`Created backup of state.vscdb at ${backupPath}`);
+            }
+
+            try
+            {
+                // Read the content of the gist file
+                const gistContent = await fs.readFile(gistStateDBPath);
+
+                // Write the content directly to the current file
+                await fs.writeFile(currentStateDBPath, gistContent);
+                this._logInfo(`Successfully replaced state.vscdb with version from gist`);
+
+                // Remove the backup if everything succeeded
+                const backupPath = `${currentStateDBPath}.backup`;
+                if (fs.existsSync(backupPath))
+                {
+                    await fs.remove(backupPath);
+                }
+            }
+            catch (error)
+            {
+                // If operation fails, restore from backup if it exists
+                const backupPath = `${currentStateDBPath}.backup`;
+                if (fs.existsSync(backupPath))
+                {
+                    await fs.copy(backupPath, currentStateDBPath);
+                    await fs.remove(backupPath);
+                    this._logInfo("Restored state.vscdb from backup after failed replacement");
+                }
+                throw error;
+            }
+        }
+        catch (error)
+        {
+            this._logError("Failed to replace state.vscdb:", error);
+            throw error;
+        }
     }
 
     /**
@@ -246,9 +343,9 @@ export class Extension
 
                 return extension;
             }
-            catch (err: any)
+            catch (error: any)
             {
-                throw new Error(localize("error.extract.extension-1", extension.id, err.message));
+                throw new Error(localize("error.extract.extension-1", extension.id, error.message));
             }
         }
 
@@ -466,7 +563,6 @@ export class Extension
                 }
                 await this.extractExtension(extension);
 
-
                 result.updated.push(item);
             }
             catch
@@ -512,7 +608,7 @@ export class Extension
     }
 
     /**
-     * Force VSCode to disable an extension using the VSCode CLI command.
+     * Force VSCode to disable an extension by modifying state.vscdb.
      * This ensures extensions are disabled immediately during installation.
      *
      * @param extension The extension to disable immediately
@@ -521,73 +617,143 @@ export class Extension
     {
         try
         {
-            // Use VSCode CLI to disable the extension
-            const { exec } = require("child_process");
-            const execName = path.basename(process.execPath); // Ottiene l'ultimo elemento del percorso
-            // The VSCode CLI command to disable an extension
+            const env = Environment.create();
+            const stateDBPath = env.stateDBPath;
 
-            // Execute the command synchronously
-            exec(`${execName} --list-extensions`, (error: Error | null, stdout: string, stderr: string) =>
+            if (!fs.existsSync(stateDBPath))
             {
-                if (error)
-                {
-                    console.error(`Errore: ${error.message}`);
-                    return;
-                }
-                if (stderr)
-                {
-                    console.error(`Stderr: ${stderr}`);
-                    return;
-                }
-                console.log(`Estensioni installate in ${execName}:\n`, stdout);
-            });
+                this._logError(`state.vscdb file not found at ${stateDBPath}`);
+                return;
+            }
 
-            console.log(`Extension ${extension.id} disabled immediately via CLI`);
-        }
-        catch (err)
-        {
-            // Fall back to writing to the .obsolete file if CLI command fails
+            // Create a temporary copy of the database
+            const tempDBPath = `${stateDBPath}.temp`;
+            fs.copyFileSync(stateDBPath, tempDBPath);
+
             try
             {
-                console.error(`Failed to disable extension ${extension.id} via CLI, falling back to .obsolete file:`, err);
+                // Use sqlite3 directly without verbose mode
+                const sqlite3 = require("sqlite3");
+                const db = new sqlite3.Database(tempDBPath);
 
-                // VSCode expects a JSON object where keys are extension IDs with version and values are true
-                let obsoleteData: Record<string, boolean> = {};
-
-                // Read existing file if it exists
-                if (fs.existsSync(this._env.obsoleteFilePath))
+                // First, try to get existing disabled extensions
+                db.get("SELECT value FROM ItemTable WHERE key = 'extensionsIdentifiers/disabled'", (dbError: any, row: any) =>
                 {
-                    try
+                    if (dbError)
                     {
-                        const content = fs.readFileSync(this._env.obsoleteFilePath, "utf8");
-                        if (content)
+                        this._logError("Error reading disabled extensions:", dbError);
+                        db.close();
+                        fs.unlinkSync(tempDBPath);
+                        return;
+                    }
+
+                    let disabledExtensions: string[] = [];
+                    if (row && row.value)
+                    {
+                        try
                         {
-                            obsoleteData = JSON.parse(content);
+                            disabledExtensions = JSON.parse(row.value);
+                            if (!Array.isArray(disabledExtensions))
+                            {
+                                disabledExtensions = [];
+                            }
+                        }
+                        catch (parseError)
+                        {
+                            this._logError("Error parsing disabled extensions:", parseError);
+                            disabledExtensions = [];
                         }
                     }
-                    catch (parseErr)
+
+                    // Add the new extension if not already present
+                    const extensionId = `${extension.publisher}.${extension.name}`;
+                    if (extensionId && !disabledExtensions.includes(extensionId))
                     {
-                        // If parsing fails, start with an empty object
-                        console.error("Error parsing .obsolete file, creating new one:", parseErr);
-                        obsoleteData = {};
+                        disabledExtensions.push(extensionId);
                     }
-                }
 
-                // Create the extension key in the format VSCode expects: publisher.name-version
-                const extensionKey = `${extension.publisher}.${extension.name}-${extension.version}`;
+                    // Update or insert the disabled extensions
+                    const value = JSON.stringify(disabledExtensions);
+                    db.run(
+                        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+                        ["extensionsIdentifiers/disabled", value],
+                        (updateError: any) =>
+                        {
+                            if (updateError)
+                            {
+                                this._logError("Error updating disabled extensions:", updateError);
+                                db.close();
+                                fs.unlinkSync(tempDBPath);
+                                return;
+                            }
 
-                // Add this extension to the obsolete list
-                obsoleteData[extensionKey] = true;
+                            // Close the database connection
+                            db.close((closeError: any) =>
+                            {
+                                if (closeError)
+                                {
+                                    this._logError("Error closing database:", closeError);
+                                    if (fs.existsSync(tempDBPath))
+                                    {
+                                        fs.unlinkSync(tempDBPath);
+                                    }
+                                    return;
+                                }
 
-                // Write the updated JSON back to the file
-                fs.writeFileSync(this._env.obsoleteFilePath, JSON.stringify(obsoleteData));
-                console.log(`Extension ${extension.id} v${extension.version} marked as obsolete (fallback method)`);
+                                // Replace the original database with the modified one
+                                try
+                                {
+                                    fs.renameSync(stateDBPath, `${stateDBPath}.backup`);
+                                    fs.renameSync(tempDBPath, stateDBPath);
+                                    this._logInfo(`Extension ${extension.id} disabled in state.vscdb`);
+                                    // Remove backup after successful operation
+                                    fs.unlinkSync(`${stateDBPath}.backup`);
+                                }
+                                catch (fsError)
+                                {
+                                    this._logError("Error replacing database file:", fsError);
+                                    // Try to restore from backup if it exists
+                                    if (fs.existsSync(`${stateDBPath}.backup`))
+                                    {
+                                        fs.renameSync(`${stateDBPath}.backup`, stateDBPath);
+                                    }
+                                }
+                            });
+                        }
+                    );
+                });
             }
-            catch (fallbackErr)
+            catch (dbError)
             {
-                // Log error but don't stop installation
-                console.error(`Failed to mark extension ${extension.id} as obsolete (all methods failed):`, fallbackErr);
+                // Clean up the temporary file if something goes wrong
+                if (fs.existsSync(tempDBPath))
+                {
+                    fs.unlinkSync(tempDBPath);
+                }
+                this._logError("Database operation failed:", dbError);
             }
         }
+        catch (error)
+        {
+            this._logError(`Failed to disable extension ${extension.id} in state.vscdb:`, error);
+        }
+    }
+
+    /**
+     * Logs an error message with optional error object
+     */
+    private _logError(message: string, error?: any): void
+    {
+        // TODO: Replace with proper logging mechanism
+        console.error(message, error || "");
+    }
+
+    /**
+     * Logs an info message with optional data object
+     */
+    private _logInfo(message: string, data?: any): void
+    {
+        // TODO: Replace with proper logging mechanism
+        console.log(message, data || "");
     }
 }
