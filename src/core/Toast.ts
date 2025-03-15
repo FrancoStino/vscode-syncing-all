@@ -10,9 +10,9 @@ import { reloadWindow } from "../utils/vscodeAPI";
 import type { Gist } from "./Gist";
 
 /**
- * Represents the item of GistListBox.
+ * Represents the item of RemoteStorageListBox.
  */
-interface IGistListBoxItem extends vscode.QuickPickItem
+interface IRemoteStorageListBoxItem extends vscode.QuickPickItem
 {
     /**
      * The payload of the item.
@@ -72,7 +72,7 @@ export function statusFatal(message: string): void
 }
 
 /**
- * Shows the GitHub Personal Access Token input box.
+ * Shows the Personal Access Token input box.
  *
  * @param forUpload Whether to show messages for upload. Defaults to `true`.
  */
@@ -106,11 +106,11 @@ export async function showGitHubTokenInputBox(forUpload: boolean = true): Promis
 }
 
 /**
- * Shows the Gist ID input box.
+ * Shows the Remote Storage ID input box.
  *
  * @param forUpload Whether to show messages for upload. Defaults to `true`.
  */
-export async function showGistInputBox(forUpload: boolean = true): Promise<string>
+export async function showStorageInputBox(forUpload: boolean = true): Promise<string>
 {
     const placeHolder = forUpload
         ? localize("toast.box.enter.gist.id.upload")
@@ -139,34 +139,34 @@ export async function showGistInputBox(forUpload: boolean = true): Promise<strin
 }
 
 /**
- * Shows the remote Gist list box.
+ * Shows the remote storage list box.
  *
- * @param api GitHub Gist utils.
+ * @param api Remote Storage utils.
  * @param forUpload Whether to show messages for upload. Defaults to `true`.
  */
-export async function showRemoteGistListBox(api: Gist, forUpload: boolean = true): Promise<string>
+export async function showRemoteStorageListBox(api: Gist, forUpload: boolean = true): Promise<string>
 {
     showSpinner(localize("toast.settings.checking.remote.gists"));
-    const gists = await api.getAll();
+    const storages = await api.getAll();
     clearSpinner("");
 
-    const manualItem: IGistListBoxItem = {
+    const manualItem: IRemoteStorageListBoxItem = {
         data: "@@manual",
         description: "",
         label: localize("toast.box.enter.gist.id.manually")
     };
 
-    let item: IGistListBoxItem | undefined = manualItem;
-    // Show quick pick dialog only if the gists is not empty.
-    if (gists.length > 0)
+    let item: IRemoteStorageListBoxItem | undefined = manualItem;
+    // Show quick pick dialog only if the storages list is not empty.
+    if (storages.length > 0)
     {
-        const items: IGistListBoxItem[] = gists.map((gist) => ({
-            data: gist.id,
+        const items: IRemoteStorageListBoxItem[] = storages.map((storage) => ({
+            data: storage.id,
             description: localize(
                 "toast.box.gist.last.uploaded",
-                formatDistance(new Date(gist.updated_at), new Date(), locale())
+                formatDistance(new Date(storage.updated_at), new Date(), locale())
             ),
-            label: `Gist ID: ${gist.id}`
+            label: `Storage ID: ${storage.id}`
         }));
         items.unshift(manualItem);
         item = await vscode.window.showQuickPick(items, {

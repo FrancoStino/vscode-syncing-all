@@ -4,7 +4,7 @@
 export interface ISyncingSettings
 {
     /**
-     * Store the GitHub Gist ID.
+     * Store the GitHub Gist ID or Google Drive Folder ID.
      */
     id: string;
 
@@ -22,6 +22,40 @@ export interface ISyncingSettings
      * Store the auto-sync setting.
      */
     auto_sync: boolean;
+
+    /**
+     * Storage provider to use
+     */
+    storage_provider: StorageProvider;
+
+    /**
+     * Google Drive API Client ID
+     */
+    google_client_id?: string;
+
+    /**
+     * Google Drive API Client Secret
+     */
+    google_client_secret?: string;
+
+    /**
+     * Google Drive API Refresh Token
+     */
+    google_refresh_token?: string;
+
+    /**
+     * Locale setting for i18n
+     */
+    locale?: string;
+}
+
+/**
+ * Available storage providers for syncing
+ */
+export enum StorageProvider
+{
+    GitHubGist = "github_gist",
+    GoogleDrive = "google_drive"
 }
 
 /**
@@ -108,6 +142,16 @@ export interface IExtension
  */
 export interface ISyncedItem
 {
+    /**
+     * Name of the synced item
+     */
+    name?: string;
+
+    /**
+     * Whether the item was successfully synced
+     */
+    synced?: boolean;
+
     /**
      * Extensions that have been added, updated or removed.
      */

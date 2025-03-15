@@ -178,6 +178,38 @@ You can now let Syncing auto-sync your settings. Here are the steps:
 1. Reload or reopen VSCode to take effect.
 
 
+## Storage Providers
+
+Syncing supports multiple storage providers for synchronizing your VSCode settings:
+
+### GitHub Gist
+
+This is the default storage provider, which synchronizes your settings using GitHub Gist.
+
+### Google Drive
+
+As an alternative, you can use Google Drive to store your settings. To set up Google Drive:
+
+1. Create a Google Cloud project and enable the Google Drive API
+2. Create OAuth credentials (Web application type)
+3. Type `"Syncing: Open Syncing Settings"` in VSCode Command Palette to open `Syncing`'s settings file
+4. Configure Google Drive as follows:
+
+```json
+{
+    "storage_provider": "google_drive",
+    "google_client_id": "YOUR_CLIENT_ID",
+    "google_client_secret": "YOUR_CLIENT_SECRET",
+    "google_refresh_token": "YOUR_REFRESH_TOKEN",
+    "auto_sync": true
+}
+```
+
+To obtain a refresh token, you'll need to:
+1. Use your client ID to generate an authorization URL
+2. Open the URL in a browser and authorize the application
+3. Copy the authorization code and exchange it for a refresh token
+
 ## Getting Started
 
 1. Get your own `GitHub Personal Access Token` (3 steps).

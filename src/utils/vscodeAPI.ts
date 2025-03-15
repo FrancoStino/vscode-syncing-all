@@ -154,8 +154,19 @@ export function reloadWindow()
 /**
  * Register extension command on VSCode.
  */
-export function registerCommand(context: vscode.ExtensionContext, command: string, callback: () => void)
+export function registerCommand(commandOrContext: vscode.ExtensionContext | string, commandOrCallback: string | (() => void), callback?: () => void): vscode.Disposable
 {
-    // Add to a list of disposables which are disposed when this extension is deactivated.
-    context.subscriptions.push(vscode.commands.registerCommand(command, callback));
+    if (typeof commandOrContext === "string")
+    {
+        // Called with (command, callback)
+        return vscode.commands.registerCommand(commandOrContext, commandOrCallback as () => void);
+    }
+    else
+    {
+        // Called with (context, command, callback)
+        const disposable = vscode.commands.registerCommand(commandOrCallback as string, callback as () => void);
+        // Add to a list of disposables which are disposed when this extension is deactivated.
+        commandOrContext.subscriptions.push(disposable);
+        return disposable;
+    }
 }

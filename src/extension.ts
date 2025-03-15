@@ -1,8 +1,10 @@
 import type { ExtensionContext } from "vscode";
+import * as vscode from "vscode";
 
-import { Gist, Syncing, VSCodeSetting, AutoSyncService } from "./core";
+import { Syncing, VSCodeSetting, AutoSyncService } from "./core";
 import { localize, setup } from "./i18n";
 import { registerCommand } from "./utils/vscodeAPI";
+import { StorageProvider, SettingType } from "./types";
 import * as Toast from "./core/Toast";
 import type { ISyncedItem } from "./types";
 
@@ -25,188 +27,310 @@ export function deactivate()
 }
 
 /**
- * Init the commands.
+ * Init commands.
  */
 function _initCommands(context: ExtensionContext)
 {
-    registerCommand(context, "syncing.uploadSettings", _uploadVSCodeSettings);
-    registerCommand(context, "syncing.downloadSettings", _downloadVSCodeSettings);
-    registerCommand(context, "syncing.openSettings", _openSyncingSettings);
-}
-
-/**
- * Init the extension.
- */
-function _initSyncing(context: ExtensionContext)
-{
-    try
-    {
-        // 1. Setup i18n.
-        setup(context.extensionPath);
-
-        // 2. Init Syncing.
-        _syncing = Syncing.create();
-        _vscodeSetting = VSCodeSetting.create();
-
-        _isReady = true;
-    }
-    catch (err: any)
-    {
-        _isReady = false;
-        Toast.statusFatal(localize("error.initialization", err.message));
-    }
-}
-
-/**
- * Init auto-sync.
- */
-function _initAutoSync()
-{
-    if (_isReady)
-    {
-        setTimeout(async () =>
+    // Register upload command.
+    context.subscriptions.push(
+        registerCommand(context, "syncing.uploadSettings", async () =>
         {
-            const syncingSettings = _syncing.loadSettings();
-            if (syncingSettings.auto_sync && syncingSettings.token != null && syncingSettings.id != null)
+            if (!_isReady || _isSynchronizing)
             {
-                _autoSyncService = AutoSyncService.create();
-                // 1. Synchronization on activation.
-                _autoSyncService.synchronize(syncingSettings);
-
-                // 2. Start watching.
-                _autoSyncService.start();
-            }
-        }, 3000);
-    }
-}
-
-/**
- * Uploads your settings.
- */
-async function _uploadVSCodeSettings()
-{
-    if (_isReady && !_isSynchronizing)
-    {
-        _isSynchronizing = true;
-        try
-        {
-            const syncingSettings = await _syncing.prepareUploadSettings(true);
-            const api = Gist.create(syncingSettings.token, _syncing.proxy);
-            const settings = await _vscodeSetting.getSettings(true, true);
-            const gist = await api.findAndUpdate(syncingSettings.id, settings, true, true);
-            if (gist.id !== syncingSettings.id)
-            {
-                await _syncing.saveSettings({ ...syncingSettings, id: gist.id });
+                return;
             }
 
-            // Synchronizes the last modified time.
-            for (const setting of settings)
-            {
-                await _vscodeSetting.saveLastModifiedTime(setting, gist.updated_at);
-            }
-
-            Toast.statusInfo(localize("toast.settings.uploaded"));
-        }
-        catch
-        {
-        }
-        _isSynchronizing = false;
-    }
-}
-
-/**
- * Downloads your settings.
- */
-async function _downloadVSCodeSettings()
-{
-    if (_isReady && !_isSynchronizing)
-    {
-        _isSynchronizing = true;
-        _pauseAutoSyncService();
-        try
-        {
-            const syncingSettings = await _syncing.prepareDownloadSettings(true);
-            const api = Gist.create(syncingSettings.token, _syncing.proxy);
             try
             {
-                const gist = await api.get(syncingSettings.id, true);
-                const syncedItems = await _vscodeSetting.saveSettings(gist, true);
-                Toast.statusInfo(localize("toast.settings.downloaded"));
-                if (_isExtensionsSynced(syncedItems))
+                _isSynchronizing = true;
+
+                // Show starting upload toast
+                Toast.statusInfo(localize("toast.settings.uploading"));
+
+                // 1. Get settings that will be uploaded.
+                const settings = await _vscodeSetting.getSettings(true, true);
+
+                // Filter out syncing.json to prevent it from being uploaded
+                const filteredSettings = settings.filter(setting =>
+                    !(setting.type === SettingType.Settings &&
+                        setting.remoteFilename === "syncing.json"));
+
+                // 2. Upload settings.
+                const syncingSettings = _syncing.loadSettings();
+
+                // Check storage provider and call appropriate upload method
+                if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
                 {
-                    Toast.showReloadBox();
+                    // Use Google Drive
+                    if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret || !syncingSettings.google_refresh_token)
+                    {
+                        // Show error for missing Google Drive credentials
+                        throw new Error(localize("error.missing.google.credentials"));
+                    }
+
+                    const googleDrive = _syncing.getGoogleDriveClient();
+
+                    // Pass the filtered settings directly to uploadSettings
+                    const storage = await googleDrive.uploadSettings(filteredSettings, true);
+
+                    // Salviamo solo l'ID della cartella nelle impostazioni di Syncing
+                    if (syncingSettings.id !== storage.id)
+                    {
+                        syncingSettings.id = storage.id;
+                        await _syncing.saveSettings(syncingSettings);
+                    }
+
+                    Toast.statusInfo(localize("toast.settings.uploaded"));
+                }
+                else
+                {
+                    // Fallback to Remote Storage
+                    const remoteStorageSettings = await _syncing.prepareUploadSettings(true);
+                    const remoteStorage = _syncing.getRemoteStorageClient();
+
+                    // 3-1. If it has a Storage ID, try to update it.
+                    if (remoteStorageSettings.id != null && remoteStorageSettings.id !== "")
+                    {
+                        // 3-1-1. Try get the remote storage.
+                        const existingStorage = await remoteStorage.exists(remoteStorageSettings.id);
+                        if (existingStorage)
+                        {
+                            // 3-1-2. If it exists, update it.
+                            await remoteStorage.findAndUpdate(remoteStorageSettings.id, settings, true, true);
+                        }
+                        else
+                        {
+                            // 3-1-3. If it doesn't exist, create a new one.
+                            const newStorage = await remoteStorage.createSettings(settings);
+
+                            // Save to Syncing's settings.
+                            remoteStorageSettings.id = newStorage.id;
+                            await _syncing.saveSettings(remoteStorageSettings);
+                        }
+                    }
+                    else
+                    {
+                        // 3-2. If no Storage ID, create a new one.
+                        const newStorage = await remoteStorage.createSettings(settings);
+
+                        // Save to Syncing's settings.
+                        remoteStorageSettings.id = newStorage.id;
+                        await _syncing.saveSettings(remoteStorageSettings);
+                    }
+
+                    Toast.statusInfo(localize("toast.settings.uploaded"));
                 }
             }
             catch (err: any)
             {
-                if (err.code === 401)
+                console.error("Syncing:", err);
+                Toast.statusError(err.message);
+            }
+            finally
+            {
+                _isSynchronizing = false;
+            }
+        })
+    );
+
+    // Register download command.
+    context.subscriptions.push(
+        registerCommand(context, "syncing.downloadSettings", async () =>
+        {
+            if (!_isReady || _isSynchronizing)
+            {
+                return;
+            }
+
+            try
+            {
+                _isSynchronizing = true;
+
+                // Show starting download toast
+                Toast.statusInfo(localize("toast.settings.downloading"));
+
+                const syncingSettings = _syncing.loadSettings();
+
+                // Check storage provider and call appropriate download method
+                if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
                 {
-                    _syncing.clearGitHubToken();
+                    // Use Google Drive
+                    if (!syncingSettings.id)
+                    {
+                        throw new Error(localize("error.no.storage.id"));
+                    }
+
+                    if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret || !syncingSettings.google_refresh_token)
+                    {
+                        throw new Error(localize("error.missing.google.credentials"));
+                    }
+
+                    const googleDrive = _syncing.getGoogleDriveClient();
+                    const remoteSettings = await googleDrive.getFiles(true);
+
+                    // 2. Download settings.
+                    const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
+
+                    Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+
+                    // 3. Reload window (after "synced").
+                    await _showReloadPrompt();
                 }
-                else if (err.code === 404)
+                else
                 {
-                    _syncing.clearGistID();
+                    // Fallback to Remote Storage
+                    // 1. Get Remote Storage.
+                    const remoteStorageSettings = await _syncing.prepareDownloadSettings(true);
+                    const remoteStorage = _syncing.getRemoteStorageClient();
+                    const remoteSettings = await remoteStorage.get(remoteStorageSettings.id, true);
+
+                    // 2. Download settings.
+                    const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
+
+                    Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+
+                    // 3. Reload window (after "synced").
+                    await _showReloadPrompt();
                 }
             }
-        }
-        catch
+            catch (err: any)
+            {
+                Toast.statusError(err.message);
+            }
+            finally
+            {
+                _isSynchronizing = false;
+            }
+        })
+    );
+
+    // Register open settings command.
+    context.subscriptions.push(
+        registerCommand(context, "syncing.openSettings", () =>
         {
-        }
-        _isSynchronizing = false;
-        _resumeAutoSyncService();
-    }
+            if (!_isReady)
+            {
+                return;
+            }
+
+            _syncing.openSettings();
+        })
+    );
 }
 
 /**
- * Opens the Syncing's settings file in a VSCode editor.
+ * Init `Syncing`.
  */
-function _openSyncingSettings()
+function _initSyncing(context: ExtensionContext)
 {
-    if (_isReady)
+    _isReady = false;
+    _isSynchronizing = false;
+
+    setup(context.extensionPath);
+    Toast.statusInfo(localize("toast.initializing"));
+
+    // Create instances using the static factory methods without arguments
+    _syncing = Syncing.create();
+    _vscodeSetting = VSCodeSetting.create();
+
+    // Initialize settings
+    _syncing.initSettings().then(() =>
     {
-        _syncing.openSettings();
-    }
+        const settings = _syncing.loadSettings();
+        _isReady = true;
+        Toast.statusInfo(localize("toast.settings.initialized"));
+
+        if (settings.auto_sync)
+        {
+            // Resume auto sync service if auto sync is enabled.
+            _resumeAutoSyncService();
+        }
+    }).catch((err: Error) =>
+    {
+        console.error(err);
+        Toast.statusError(localize("toast.init.failed"));
+    });
 }
 
 /**
- * Determines whether the extensions are actually synchronized.
+ * Init auto sync service.
  */
-function _isExtensionsSynced(syncedItems: { updated: ISyncedItem[]; removed: ISyncedItem[] }): boolean
+function _initAutoSync()
 {
-    for (const item of syncedItems.updated)
+    _autoSyncService = AutoSyncService.create();
+    _autoSyncService.on("upload_settings", () =>
     {
-        if (item.extension && (
-            item.extension.added.length > 0
-            || item.extension.removed.length > 0
-            || item.extension.updated.length > 0)
-        )
-        {
-            return true;
-        }
-    }
-    return false;
+        vscode.commands.executeCommand("syncing.uploadSettings");
+    });
+    _autoSyncService.on("download_settings", () =>
+    {
+        vscode.commands.executeCommand("syncing.downloadSettings");
+    });
 }
 
-function _pauseAutoSyncService()
-{
-    if (_autoSyncService)
-    {
-        _autoSyncService.pause();
-    }
-}
-
+/**
+ * Resume auto sync service.
+ */
 function _resumeAutoSyncService()
 {
-    if (_autoSyncService)
+    if (!_isSynchronizing)
     {
-        _autoSyncService.resume();
+        if (_isReady && _autoSyncService && !_autoSyncService.isRunning())
+        {
+            _autoSyncService.start();
+        }
     }
 }
 
+/**
+ * Stop auto sync service.
+ */
 function _stopAutoSyncService()
 {
-    if (_autoSyncService)
+    if (_autoSyncService && _autoSyncService.isRunning())
     {
         _autoSyncService.stop();
+    }
+}
+
+/**
+ * Shows reload prompt.
+ */
+async function _showReloadPrompt(): Promise<void>
+{
+    const reload = localize("toast.settings.show.reload.button.text");
+    const later = localize("toast.settings.show.reload.later.button.text");
+    const result = await vscode.window.showInformationMessage(
+        localize("toast.settings.show.reload.message"),
+        reload,
+        later
+    );
+    if (result === reload)
+    {
+        vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
+}
+
+/**
+ * Gets syncing complete message.
+ */
+function _getSyncingCompleteMessage(syncedItems: { updated: ISyncedItem[]; removed: ISyncedItem[] }): string
+{
+    const failedItems = [...syncedItems.updated, ...syncedItems.removed].filter((item) => !item.synced);
+    if (failedItems.length === 0)
+    {
+        return localize("toast.settings.synced");
+    }
+    else if (failedItems.length === 1)
+    {
+        return localize("toast.settings.synced.with.errors.single", failedItems[0].name);
+    }
+    else if (failedItems.length === 2)
+    {
+        return localize("toast.settings.synced.with.errors.double", failedItems[0].name, failedItems[1].name);
+    }
+    else
+    {
+        return localize("toast.settings.synced.with.errors.multiple", failedItems.length);
     }
 }

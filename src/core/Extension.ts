@@ -209,7 +209,7 @@ export class Extension
             this._forceDisableExtension(ext);
         }
 
-        // Replace state.vscdb with the one from gist
+        // Replace state.vscdb with the one from Google Drive
         if (this.hasStateDB())
         {
             await this.replaceStateDB(this.getStateDBPath());
@@ -253,10 +253,10 @@ export class Extension
     }
 
     /**
-     * Replaces the current state.vscdb with the one from the gist
-     * @param gistStateDBPath Path to the state.vscdb file from the gist
+     * Replaces the current state.vscdb with the one from Google Drive
+     * @param googleDriveStateDBPath Path to the state.vscdb file from Google Drive
      */
-    public async replaceStateDB(gistStateDBPath: string): Promise<void>
+    public async replaceStateDB(googleDriveStateDBPath: string): Promise<void>
     {
         try
         {
@@ -272,12 +272,43 @@ export class Extension
 
             try
             {
-                // Read the content of the gist file
-                const gistContent = await fs.readFile(gistStateDBPath);
+                // Ensure directory exists
+                await fs.ensureDir(path.dirname(currentStateDBPath));
+
+                // Read the content of the Google Drive file - handle both binary and base64 encoded files
+                let driveContent;
+                try
+                {
+                    // First try to read as binary file
+                    driveContent = await fs.readFile(googleDriveStateDBPath);
+
+                    // Check if the content might be base64 encoded
+                    const contentAsString = driveContent.toString("utf8");
+                    if (contentAsString.match(/^[A-Za-z0-9+/=]+$/))
+                    {
+                        try
+                        {
+                            // Try to decode it as base64
+                            const decoded = Buffer.from(contentAsString, "base64");
+                            driveContent = decoded;
+                            this._logInfo("Detected and decoded base64 encoded state.vscdb file");
+                        }
+                        catch (err)
+                        {
+                            // If decoding fails, use the original binary
+                            this._logInfo("Content appears to be base64 but decoding failed, using as binary");
+                        }
+                    }
+                }
+                catch (err)
+                {
+                    this._logError(`Error reading Google Drive state.vscdb: ${err.message}`);
+                    throw err;
+                }
 
                 // Write the content directly to the current file
-                await fs.writeFile(currentStateDBPath, gistContent);
-                this._logInfo(`Successfully replaced state.vscdb with version from gist`);
+                await fs.writeFile(currentStateDBPath, driveContent);
+                this._logInfo(`Successfully replaced state.vscdb with version from Google Drive`);
 
                 // Remove the backup if everything succeeded
                 const backupPath = `${currentStateDBPath}.backup`;

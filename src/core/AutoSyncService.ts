@@ -1,29 +1,34 @@
-import * as vscode from "vscode";
+import { EventEmitter } from "events";
 
 import { Gist } from "./Gist";
+import { GoogleDrive } from "./GoogleDrive";
 import { isAfter } from "../utils/date";
 import { localize } from "../i18n";
 import { SettingsWatcherService, WatcherEvent } from "../watcher";
 import { VSCodeSetting } from "./VSCodeSetting";
+import { StorageProvider } from "../types";
 import * as Toast from "./Toast";
-import type { IGist, ISetting, ISyncingSettings } from "../types";
+import type { IRemoteStorage, ISyncingSettings } from "../types";
 
 export class AutoSyncService
 {
     private static _instance: AutoSyncService;
 
-    private _vscodeSetting: VSCodeSetting;
+    private _gistSetting: VSCodeSetting;
     private _watcher: SettingsWatcherService;
+    private _running: boolean = false;
+    private _eventEmitter: EventEmitter;
 
     private constructor()
     {
-        this._vscodeSetting = VSCodeSetting.create();
+        this._gistSetting = VSCodeSetting.create();
         this._watcher = new SettingsWatcherService();
-        this._watcher.on(WatcherEvent.ALL, this._handleWatcherEvent);
+        this._eventEmitter = new EventEmitter();
+        this._watcher.on(WatcherEvent.ALL, () => { this._handleWatcherEvent(); });
     }
 
     /**
-     * Creates an instance of singleton class `AutoSyncService`.
+     * Creates an instance of the class `AutoSyncService`.
      */
     public static create(): AutoSyncService
     {
@@ -35,10 +40,30 @@ export class AutoSyncService
     }
 
     /**
+     * Register an event listener
+     *
+     * @param event The event to listen for ('upload_settings' or 'download_settings')
+     * @param listener The callback function to execute when the event is triggered
+     */
+    public on(event: string, listener: (...args: any[]) => void): void
+    {
+        this._eventEmitter.on(event, listener);
+    }
+
+    /**
+     * Check if the auto-sync service is currently running
+     */
+    public isRunning(): boolean
+    {
+        return this._running;
+    }
+
+    /**
      * Start auto-sync service.
      */
     public start()
     {
+        this._running = true;
         this._watcher.start();
     }
 
@@ -47,6 +72,7 @@ export class AutoSyncService
      */
     public pause()
     {
+        this._running = false;
         this._watcher.pause();
     }
 
@@ -55,6 +81,7 @@ export class AutoSyncService
      */
     public resume()
     {
+        this._running = true;
         this._watcher.resume();
     }
 
@@ -63,67 +90,102 @@ export class AutoSyncService
      */
     public stop()
     {
+        this._running = false;
         this._watcher.stop();
     }
 
     /**
-     * Check the last modified time of remote and local settings, and make a synchronization if necessary.
+     * Synchronize settings.
      */
     public async synchronize(syncingSettings: ISyncingSettings)
     {
-        Toast.showSpinner(localize("toast.settings.autoSync.checkingSettings"));
         try
         {
-            const { token, id, http_proxy } = syncingSettings;
-            const localSettings = await this._vscodeSetting.getSettings(true);
-            const localLastModified = this._vscodeSetting.getLastModified(localSettings);
+            Toast.showSpinner(localize("toast.settings.autoSync.checkingSettings"));
 
-            const api = Gist.create(token, http_proxy);
-            const remoteSettings = await api.get(id);
-            const remoteLastModified = remoteSettings.updated_at;
-            if (this._isModified(localSettings, remoteSettings, api))
+            // Check if storage provider has valid settings
+            if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
             {
-                if (isAfter(localLastModified, remoteLastModified))
+                if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret || !syncingSettings.google_refresh_token)
                 {
-                    // Upload settings.
-                    await vscode.commands.executeCommand("syncing.uploadSettings");
+                    throw new Error(localize("error.missing.google.credentials"));
                 }
-                else
+
+                const drive = GoogleDrive.create(
+                    syncingSettings.google_client_id,
+                    syncingSettings.google_client_secret,
+                    syncingSettings.google_refresh_token,
+                    syncingSettings.id
+                );
+
+                // 1. Check remote settings.
+                const remoteGist = await drive.getFiles();
+
+                // 2. Check if need synchronize.
+                const shouldSync = await this._shouldSynchronize(remoteGist);
+                if (shouldSync)
                 {
-                    // Download settings.
-                    await vscode.commands.executeCommand("syncing.downloadSettings");
+                    // 3. Synchronize settings.
+                    await this._gistSetting.saveSettings(remoteGist);
                 }
             }
             else
             {
-                // Do nothing if not modified.
-                Toast.clearSpinner("");
-                Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
+                // GitHub Gist
+                if (!syncingSettings.token || !syncingSettings.id)
+                {
+                    throw new Error(localize("error.empty.token.or.id"));
+                }
+
+                const api = Gist.create(syncingSettings.token);
+
+                // 1. Check remote settings.
+                const remoteGist = await api.get(syncingSettings.id);
+
+                // 2. Check if need synchronize.
+                const shouldSync = await this._shouldSynchronize(remoteGist);
+                if (shouldSync)
+                {
+                    // 3. Synchronize settings.
+                    await this._gistSetting.saveSettings(remoteGist);
+                }
             }
+            Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
         }
         catch (err: any)
         {
-            Toast.statusError(localize("toast.settings.autoSync.failed", err.message));
+            throw err;
+        }
+        return false;
+    }
+
+    private async _shouldSynchronize(gist: IRemoteStorage): Promise<boolean>
+    {
+        try
+        {
+            // Gets the last modified time (in milliseconds) of the local settings.
+            const local = await this._gistSetting.getSettings();
+
+            // Gets the last modified time (in milliseconds) of the remote gist.
+            const remoteLastModified = new Date(gist.updated_at).getTime();
+
+            // Compares the local and remote settings.
+            const localLastModified = this._gistSetting.getLastModified(local);
+            if (isAfter(remoteLastModified, localLastModified))
+            {
+                return true;
+            }
+            return false;
+        }
+        catch (err: any)
+        {
+            return false;
         }
     }
 
     private _handleWatcherEvent()
     {
-        // Upload settings whenever the user changed the local settings.
-        vscode.commands.executeCommand("syncing.uploadSettings");
-    }
-
-    private _isModified(localSettings: ISetting[], remoteSettings: IGist, api: Gist): boolean
-    {
-        const localFiles = {} as any;
-        for (const item of localSettings)
-        {
-            // Filter out `null` content.
-            if (item.content)
-            {
-                localFiles[item.remoteFilename] = { content: item.content };
-            }
-        }
-        return api.getModifiedFiles(localFiles, remoteSettings.files) != null;
+        // Emit event to trigger upload
+        this._eventEmitter.emit("upload_settings");
     }
 }

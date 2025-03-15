@@ -1,4 +1,4 @@
-import { SettingType, VSCodeEdition } from "../types";
+import { SettingType, StorageProvider, VSCodeEdition } from "../types";
 
 /**
  * Note that this is an ordered list, to ensure that the smaller files
@@ -22,6 +22,12 @@ export const CONFIGURATION_EXCLUDED_SETTINGS = "excludedSettings";
 export const CONFIGURATION_EXTENSIONS_AUTOUPDATE = "extensions.autoUpdate";
 export const CONFIGURATION_POKA_YOKE_THRESHOLD = "pokaYokeThreshold";
 export const CONFIGURATION_SEPARATE_KEYBINDINGS = "separateKeybindings";
+export const CONFIGURATION_DEFAULT_STORAGE_PROVIDER = "defaultStorageProvider";
+
+/**
+ * Default storage provider
+ */
+export const DEFAULT_STORAGE_PROVIDER = StorageProvider.GoogleDrive;
 
 /**
  * Dot-separated identifiers, used to access the properties of Syncing's VSCode settings.

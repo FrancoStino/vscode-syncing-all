@@ -2,11 +2,14 @@ import * as fs from "fs-extra";
 
 import { Environment } from "./Environment";
 import { Gist } from "./Gist";
+import { GoogleDrive } from "./GoogleDrive";
 import { isEmptyString } from "../utils/lang";
 import { localize } from "../i18n";
 import { normalizeHttpProxy } from "../utils/normalizer";
 import { openFile } from "../utils/vscodeAPI";
 import * as Toast from "./Toast";
+import { StorageProvider } from "../types";
+import { DEFAULT_STORAGE_PROVIDER } from "../constants";
 import type { ISyncingSettings } from "../types";
 
 /**
@@ -23,7 +26,8 @@ export class Syncing
         id: "",
         token: "",
         http_proxy: "",
-        auto_sync: false
+        auto_sync: false,
+        storage_provider: DEFAULT_STORAGE_PROVIDER
     };
 
     private _env: Environment;
@@ -76,6 +80,37 @@ export class Syncing
     }
 
     /**
+     * Gets the storage provider setting of `Syncing`.
+     */
+    public get storageProvider(): StorageProvider
+    {
+        return this.loadSettings().storage_provider || StorageProvider.GitHubGist;
+    }
+
+    /**
+     * Gets the Remote Storage client.
+     */
+    public getRemoteStorageClient(): Gist
+    {
+        const settings = this.loadSettings();
+        return Gist.create(settings.token, settings.http_proxy);
+    }
+
+    /**
+     * Gets the Google Drive client.
+     */
+    public getGoogleDriveClient(): GoogleDrive
+    {
+        const settings = this.loadSettings();
+        return GoogleDrive.create(
+            settings.google_client_id,
+            settings.google_client_secret,
+            settings.google_refresh_token,
+            settings.id
+        );
+    }
+
+    /**
      * Init the `Syncing`'s settings file.
      */
     public initSettings(): Promise<void>
@@ -84,9 +119,9 @@ export class Syncing
     }
 
     /**
-     * Clears the GitHub Personal Access Token and save to `Syncing`'s settings file.
+     * Clears the personal access token and save to `Syncing`'s settings file.
      */
-    public clearGitHubToken(): Promise<void>
+    public clearToken(): Promise<void>
     {
         const settings: ISyncingSettings = this.loadSettings();
         settings.token = "";
@@ -94,9 +129,9 @@ export class Syncing
     }
 
     /**
-     * Clears the Gist ID and save to `Syncing`'s settings file.
+     * Clears the remote storage ID and save to `Syncing`'s settings file.
      */
-    public clearGistID(): Promise<void>
+    public clearStorageID(): Promise<void>
     {
         const settings: ISyncingSettings = this.loadSettings();
         settings.id = "";
@@ -110,7 +145,7 @@ export class Syncing
      */
     public prepareUploadSettings(showIndicator: boolean = false): Promise<ISyncingSettings>
     {
-        // GitHub Token must exist, but Gist ID could be none.
+        // Access token must exist, but storage ID could be none.
         return this.prepareSettings(true, showIndicator);
     }
 
@@ -121,7 +156,7 @@ export class Syncing
      */
     public prepareDownloadSettings(showIndicator: boolean = false): Promise<ISyncingSettings>
     {
-        // GitHub Token could be none, but Gist ID must exist.
+        // Access token could be none, but storage ID must exist.
         return this.prepareSettings(false, showIndicator);
     }
 
@@ -143,16 +178,30 @@ export class Syncing
             const settings: ISyncingSettings = this.loadSettings();
             const isTokenEmpty = settings.token == null || isEmptyString(settings.token);
             const isIDEmpty = settings.id == null || isEmptyString(settings.id);
-            // Ask for token when:
-            // 1. uploading with an empty token
-            // 2. downloading with an empty token and an empty Gist ID.
-            if (isTokenEmpty && (forUpload || isIDEmpty))
+
+            // Skip access token request if using Google Drive
+            if (settings.storage_provider === StorageProvider.GoogleDrive)
             {
-                settings.token = await Toast.showGitHubTokenInputBox(forUpload);
+                // For Google Drive, we only need to check if ID is empty for downloading
+                if (isIDEmpty && !forUpload)
+                {
+                    throw new Error(localize("error.check.folder.id"));
+                }
             }
-            if (isIDEmpty)
+            else
             {
-                settings.id = await this._requestGistID(settings.token, forUpload);
+                // Only check access token for GitHub Gist provider
+                // Ask for token when:
+                // 1. uploading with an empty token
+                // 2. downloading with an empty token and an empty storage ID.
+                if (isTokenEmpty && (forUpload || isIDEmpty))
+                {
+                    settings.token = await Toast.showGitHubTokenInputBox(forUpload);
+                }
+                if (isIDEmpty)
+                {
+                    settings.id = await this._requestStorageID(settings.token, forUpload);
+                }
             }
 
             await this.saveSettings(settings, true);
@@ -250,24 +299,24 @@ export class Syncing
     }
 
     /**
-     * Ask user for Gist ID.
+     * Ask user for storage ID.
      *
      * @param token GitHub Personal Access Token.
      * @param forUpload Whether to show messages for upload. Defaults to `true`.
      */
-    private async _requestGistID(token: string, forUpload: boolean = true): Promise<string>
+    private async _requestStorageID(token: string, forUpload: boolean = true): Promise<string>
     {
         if (token != null && !isEmptyString(token))
         {
             const api: Gist = Gist.create(token, this.proxy);
-            const id = await Toast.showRemoteGistListBox(api, forUpload);
+            const id = await Toast.showRemoteStorageListBox(api, forUpload);
             if (isEmptyString(id))
             {
-                // Show gist input box when id is still not supplied.
-                return Toast.showGistInputBox(forUpload);
+                // Show storage input box when id is still not supplied.
+                return Toast.showStorageInputBox(forUpload);
             }
             return id;
         }
-        return Toast.showGistInputBox(forUpload);
+        return Toast.showStorageInputBox(forUpload);
     }
 }
