@@ -2,7 +2,7 @@
     "name": "syncing-all-ide",
     "displayName": "Syncing All IDE",
     "description": "Syncing All IDE",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "publisher": "DavideLadisa",
     "preview": true,
     "author": {
