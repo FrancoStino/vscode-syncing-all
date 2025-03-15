@@ -291,3 +291,141 @@ export function clearSpinner(message?: string): void
         }
     }
 }
+
+/**
+ * Interface for Google Drive folder item in the quick pick list
+ */
+interface IGoogleDriveFolderItem
+{
+    data: string;
+    description: string;
+    label: string;
+}
+
+/**
+ * Shows the Google Drive folder list box for selection.
+ *
+ * @param googleDrive Google Drive client instance.
+ * @param forUpload Whether to show messages for upload. Defaults to `true`.
+ */
+export async function showGoogleDriveFolderListBox(googleDrive: any, forUpload: boolean = true): Promise<string>
+{
+    showSpinner(localize("toast.settings.checking.google.folders"));
+
+    try
+    {
+        const folders = await googleDrive.listFolders();
+        clearSpinner("");
+
+        // Option to create a new folder or enter manually
+        const createNewItem: IGoogleDriveFolderItem = {
+            data: "@@create_new",
+            description: localize("toast.box.google.create.new.folder"),
+            label: localize("toast.box.google.create.new.folder.label")
+        };
+
+        const manualItem: IGoogleDriveFolderItem = {
+            data: "@@manual",
+            description: "",
+            label: localize("toast.box.enter.folder.id.manually")
+        };
+
+        let items: IGoogleDriveFolderItem[] = [];
+
+        // Add existing folders
+        if (folders.length > 0)
+        {
+            const folderItems = folders.map((folder: { id: string; name: string; date: string }) => ({
+                data: folder.id,
+                description: folder.date,
+                label: `${folder.name} (${folder.id})`
+            }));
+            items = [...folderItems];
+        }
+
+        // Add create new option for upload
+        if (forUpload)
+        {
+            items.unshift(createNewItem);
+        }
+
+        // Always add manual option
+        items.unshift(manualItem);
+
+        // Show quick pick dialog
+        const item = await vscode.window.showQuickPick(items, {
+            ignoreFocusOut: true,
+            matchOnDescription: true,
+            placeHolder: forUpload
+                ? localize("toast.box.choose.google.folder.upload")
+                : localize("toast.box.choose.google.folder.download")
+        });
+
+        if (item === undefined)
+        {
+            // Cancelled.
+            throw new Error(localize("error.abort.synchronization"));
+        }
+        else
+        {
+            const { data: id } = item;
+
+            if (id === "@@manual")
+            {
+                // Show input box for manual ID entry
+                return await showGoogleDriveFolderInputBox(forUpload);
+            }
+            else if (id === "@@create_new")
+            {
+                // Create a new folder and return its ID
+                showSpinner(localize("toast.google.folder.creating"));
+                const folderId = await googleDrive.getOrCreateFolder(true);
+                clearSpinner("");
+                return folderId;
+            }
+            else
+            {
+                return id;
+            }
+        }
+    }
+    catch (error)
+    {
+        clearSpinner("");
+        throw error;
+    }
+}
+
+/**
+ * Shows the Google Drive folder ID input box.
+ *
+ * @param forUpload Whether to show messages for upload. Defaults to `true`.
+ */
+export async function showGoogleDriveFolderInputBox(forUpload: boolean = true): Promise<string>
+{
+    const placeHolder = forUpload
+        ? localize("toast.box.enter.google.folder.id.upload")
+        : localize("toast.box.enter.google.folder.id.download");
+    const value = await vscode.window.showInputBox({
+        ignoreFocusOut: true,
+        password: false,
+        placeHolder,
+        prompt: localize("toast.box.enter.google.folder.id.description")
+    });
+
+    if (value === undefined)
+    {
+        // Cancelled.
+        throw new Error(localize("error.abort.synchronization"));
+    }
+    else
+    {
+        const id = value.trim();
+        if (!id && !forUpload)
+        {
+            // Only throw when it's downloading.
+            throw new Error(localize("error.no.folder.id"));
+        }
+        return id;
+    }
+}

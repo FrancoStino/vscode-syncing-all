@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import * as fs from "fs-extra";
 
 import { Environment } from "./Environment";
@@ -9,7 +10,11 @@ import { normalizeHttpProxy } from "../utils/normalizer";
 import { openFile } from "../utils/vscodeAPI";
 import * as Toast from "./Toast";
 import { StorageProvider } from "../types";
-import { DEFAULT_STORAGE_PROVIDER } from "../constants";
+import {
+    DEFAULT_STORAGE_PROVIDER,
+    DEFAULT_GOOGLE_CLIENT_ID,
+    DEFAULT_GOOGLE_CLIENT_SECRET
+} from "../constants";
 import type { ISyncingSettings } from "../types";
 
 /**
@@ -27,11 +32,16 @@ export class Syncing
         token: "",
         http_proxy: "",
         auto_sync: false,
-        storage_provider: DEFAULT_STORAGE_PROVIDER
+        storage_provider: StorageProvider.GoogleDrive,
+        google_client_id: DEFAULT_GOOGLE_CLIENT_ID,
+        google_client_secret: DEFAULT_GOOGLE_CLIENT_SECRET
     };
 
     private _env: Environment;
     private _settingsPath: string;
+
+    // Track the last requested operation
+    private _lastRequestedOperation: "upload" | "download" | null = null;
 
     private constructor()
     {
@@ -84,7 +94,7 @@ export class Syncing
      */
     public get storageProvider(): StorageProvider
     {
-        return this.loadSettings().storage_provider || StorageProvider.GitHubGist;
+        return this.loadSettings().storage_provider ?? StorageProvider.GitHubGist;
     }
 
     /**
@@ -103,18 +113,65 @@ export class Syncing
     {
         const settings = this.loadSettings();
         return GoogleDrive.create(
-            settings.google_client_id,
-            settings.google_client_secret,
+            settings.google_client_id ?? DEFAULT_GOOGLE_CLIENT_ID,
+            settings.google_client_secret ?? DEFAULT_GOOGLE_CLIENT_SECRET,
             settings.google_refresh_token,
             settings.id
         );
     }
 
     /**
+     * Sets the last requested operation (upload or download)
+     * @param operation The operation type
+     */
+    public setLastRequestedOperation(operation: "upload" | "download"): void
+    {
+        this._lastRequestedOperation = operation;
+    }
+
+    /**
+     * Gets the last requested operation
+     * @returns The last requested operation or null if none
+     */
+    public getLastRequestedOperation(): "upload" | "download" | null
+    {
+        return this._lastRequestedOperation;
+    }
+
+    /**
      * Init the `Syncing`'s settings file.
      */
-    public initSettings(): Promise<void>
+    public async initSettings(): Promise<void>
     {
+        // Check if the settings file already exists
+        const fileExists = await fs.pathExists(this._settingsPath);
+
+        if (fileExists)
+        {
+            // If file exists, load and validate it instead of overwriting
+            try
+            {
+                const currentSettings = this.loadSettings();
+
+                // Only initialize if the settings are incomplete/invalid
+                if (!currentSettings.storage_provider)
+                {
+                    // Set default storage provider while preserving other settings
+                    currentSettings.storage_provider = DEFAULT_STORAGE_PROVIDER;
+                    return this.saveSettings(currentSettings);
+                }
+
+                // Settings are valid, no need to initialize
+                return;
+            }
+            catch (err)
+            {
+                console.error("Failed to load existing settings, will initialize with defaults", err);
+                // Continue to initialization if loading fails
+            }
+        }
+
+        // Initialize with default settings if file doesn't exist or is invalid
         return this.saveSettings(Syncing._DEFAULT_SETTINGS);
     }
 
@@ -176,16 +233,59 @@ export class Syncing
         try
         {
             const settings: ISyncingSettings = this.loadSettings();
-            const isTokenEmpty = settings.token == null || isEmptyString(settings.token);
-            const isIDEmpty = settings.id == null || isEmptyString(settings.id);
+            settings.token = settings.token || "";
+            settings.id = settings.id || "";
 
             // Skip access token request if using Google Drive
             if (settings.storage_provider === StorageProvider.GoogleDrive)
             {
+                // Check if Google credentials are missing but considering defaults
+                const hasGoogleClientId = settings.google_client_id || DEFAULT_GOOGLE_CLIENT_ID;
+                const hasGoogleClientSecret = settings.google_client_secret || DEFAULT_GOOGLE_CLIENT_SECRET;
+                const isMissingGoogleCredentials = !hasGoogleClientId || !hasGoogleClientSecret;
+
+                if (isMissingGoogleCredentials)
+                {
+                    // Show a helpful error message with instructions instead of resetting
+                    if (showIndicator)
+                    {
+                        Toast.clearSpinner("");
+                    }
+
+                    throw new Error(localize("error.missing.google.credentials.instructions"));
+                }
+
                 // For Google Drive, we only need to check if ID is empty for downloading
-                if (isIDEmpty && !forUpload)
+                if ((settings.id == null || isEmptyString(settings.id)) && !forUpload)
                 {
                     throw new Error(localize("error.check.folder.id"));
+                }
+
+                // If we're missing the refresh token, we should initiate the authentication flow
+                if (!settings.google_refresh_token)
+                {
+                    // Get Google Drive client to initiate authentication
+                    const googleDrive = this.getGoogleDriveClient();
+
+                    // Start authentication process by opening the browser
+                    await googleDrive.authenticate();
+
+                    // After authentication, get the refresh token and save it to settings
+                    if (googleDrive.refreshToken)
+                    {
+                        settings.google_refresh_token = googleDrive.refreshToken;
+                        await this.saveSettings(settings, true);
+
+                        // Instead of throwing an error, return the updated settings
+                        if (showIndicator)
+                        {
+                            Toast.clearSpinner("");
+                        }
+                        return settings;
+                    }
+
+                    // Authentication flow will continue via the URI handler
+                    throw new Error(localize("toast.google.auth.wait"));
                 }
             }
             else
@@ -194,11 +294,11 @@ export class Syncing
                 // Ask for token when:
                 // 1. uploading with an empty token
                 // 2. downloading with an empty token and an empty storage ID.
-                if (isTokenEmpty && (forUpload || isIDEmpty))
+                if ((settings.token == null || isEmptyString(settings.token)) && (forUpload || isEmptyString(settings.id)))
                 {
                     settings.token = await Toast.showGitHubTokenInputBox(forUpload);
                 }
-                if (isIDEmpty)
+                if (settings.id == null || isEmptyString(settings.id))
                 {
                     settings.id = await this._requestStorageID(settings.token, forUpload);
                 }
@@ -216,11 +316,17 @@ export class Syncing
         {
             if (showIndicator)
             {
-                Toast.statusError(
-                    forUpload
-                        ? localize("toast.settings.uploading.canceled", error.message)
-                        : localize("toast.settings.downloading.canceled", error.message)
-                );
+                Toast.clearSpinner("");
+
+                // Only show error as uploading/downloading canceled if it's not an authentication message
+                if (error.message !== localize("toast.google.auth.wait"))
+                {
+                    Toast.statusError(
+                        forUpload
+                            ? localize("toast.settings.uploading.canceled", error.message)
+                            : localize("toast.settings.downloading.canceled", error.message)
+                    );
+                }
             }
             throw error;
         }
@@ -249,7 +355,7 @@ export class Syncing
         let proxy = settings.http_proxy;
         if (proxy == null || isEmptyString(proxy))
         {
-            proxy = process.env["http_proxy"] ?? process.env["https_proxy"];
+            proxy = process.env["http_proxy"] || process.env["https_proxy"];
         }
 
         return { ...settings, http_proxy: normalizeHttpProxy(proxy) };
@@ -283,6 +389,10 @@ export class Syncing
         {
             target.http_proxy = "";
         }
+
+        // Non salvare mai client ID e secret nel file syncing.json
+        delete target.google_client_id;
+        delete target.google_client_secret;
 
         const content = JSON.stringify(target, null, 4);
         try

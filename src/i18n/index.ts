@@ -3,7 +3,8 @@ import * as path from "path";
 
 import { format } from "../utils/template";
 import { getNormalizedVSCodeLocale } from "../utils/vscodeAPI";
-import type { NormalizedLocale } from "../types";
+import { NormalizedLocale } from "../types";
+import type { NormalizedLocale as NormalizedLocaleType } from "../types";
 
 let instance: I18n;
 
@@ -14,7 +15,7 @@ class I18n
 
     private _bundle: Record<string, string>;
     private _extensionPath: string;
-    private _locale: NormalizedLocale;
+    private _locale: NormalizedLocaleType;
 
     private constructor(extensionPath: string)
     {
@@ -38,7 +39,7 @@ class I18n
     /**
      * Gets the VSCode locale.
      */
-    public get locale(): NormalizedLocale
+    public get locale(): NormalizedLocaleType
     {
         return this._locale;
     }
@@ -152,7 +153,11 @@ class I18n
             catch
             {
                 /* Ignore localization load errors */
-                console.warn(`Failed to load locale file for ${this._locale}, using default locale`);
+                // Only log warning for non-English locales since English is the default
+                if (this._locale !== NormalizedLocale.EN_US)
+                {
+                    console.warn(`Failed to load locale file for ${this._locale}, using default locale`);
+                }
             }
         }
         catch (err: any)
@@ -175,7 +180,7 @@ export function setup(extensionPath: string): void
 /**
  * Gets the VSCode locale.
  */
-export function locale(): NormalizedLocale
+export function locale(): NormalizedLocaleType
 {
     return instance.locale;
 }

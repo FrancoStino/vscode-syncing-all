@@ -1,9 +1,15 @@
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { google } from "googleapis";
+import * as vscode from "vscode";
+import * as http from "http";
+import * as url from "url";
 
 import { clearSpinner, showSpinner, statusError } from "./Toast";
 import { localize } from "../i18n";
 import { SettingType } from "../types";
 import { createError } from "../utils/errors";
+import { OAUTH_SERVER_PORT } from "../constants";
 import type { IGist as IRemoteStorage, IGistFiles as IRemoteFiles, ISetting } from "../types";
 
 /**
@@ -36,7 +42,8 @@ export class GoogleDrive
             this._auth = new google.auth.OAuth2({
                 clientId,
                 clientSecret,
-                redirectUri: "http://localhost:3000" // Redirect URI for desktop apps
+                // Use configurable port for callback server
+                redirectUri: `http://localhost:${OAUTH_SERVER_PORT}/oauth2callback`
             });
 
             if (refreshToken)
@@ -115,6 +122,135 @@ export class GoogleDrive
     }
 
     /**
+     * Opens the browser for authentication and returns a refresh token
+     */
+    public async authenticate(): Promise<void>
+    {
+        if (!this._auth)
+        {
+            throw createError(localize("error.check.google.credentials"), 401);
+        }
+
+        try
+        {
+            // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+            const authUrl = this.getAuthUrl();
+
+            // Create a promise that will be resolved when we get the auth code
+            const authCodePromise = new Promise<string>((resolve, reject) =>
+            {
+                // Create a local server to receive the OAuth callback
+                const server = http.createServer(async (req, res) =>
+                {
+                    try
+                    {
+                        // Torno a usare url.parse per compatibilità con Node.js 8.0.0
+                        const reqUrl = req.url || "";
+                        // eslint-disable-next-line node/no-deprecated-api
+                        const parsedUrl = url.parse(reqUrl, true);
+
+                        if (parsedUrl.pathname === "/oauth2callback")
+                        {
+                            // Send a response to the browser
+                            res.writeHead(200, { "Content-Type": "text/html" });
+                            res.end(`
+                                <html>
+                                <head><title>Authentication completed</title></head>
+                                <body>
+                                    <h1>Authentication completed</h1>
+                                    <p>You can close this window and return to your IDE.</p>
+                                    <script>window.close();</script>
+                                </body>
+                                </html>
+                            `);
+
+                            const code = parsedUrl.query.code;
+                            if (code)
+                            {
+                                // Got the auth code, resolve the promise
+                                resolve(code as string);
+
+                                // Close the server after a short delay to ensure the response is sent
+                                setTimeout(() =>
+                                {
+                                    server.close();
+                                }, 1000);
+                            }
+                            else if (parsedUrl.query.error)
+                            {
+                                // Authentication failed
+                                const error = parsedUrl.query.error || "unknown";
+                                reject(new Error(`Authorization failed: ${error}`));
+                                server.close();
+                            }
+                        }
+                    }
+                    catch (err)
+                    {
+                        console.error("Error handling request:", err);
+                        reject(err);
+                        server.close();
+                    }
+                });
+
+                // Start the server on the configured port
+                server.listen(OAUTH_SERVER_PORT, () =>
+                {
+                    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+                    console.log(`OAuth callback server is running on http://localhost:${OAUTH_SERVER_PORT}`);
+                });
+
+                // Add a timeout to close the server if not used
+                setTimeout(() =>
+                {
+                    if (server.listening)
+                    {
+                        server.close();
+                        reject(new Error(localize("error.auth.timeout")));
+                    }
+                }, 5 * 60 * 1000); // 5 minutes timeout
+            });
+
+            // Open the URL in the browser
+            const success = await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+
+            if (!success)
+            {
+                throw new Error(localize("error.browser.open"));
+            }
+
+            // Show a message to the user
+            vscode.window.showInformationMessage(
+                localize("toast.google.auth.browser.opened"),
+                localize("button.copy.url")
+            ).then(selection =>
+            {
+                if (selection === localize("button.copy.url"))
+                {
+                    vscode.env.clipboard.writeText(authUrl);
+                    vscode.window.showInformationMessage(localize("toast.url.copied"));
+                }
+            });
+
+            // Wait for the auth code
+            const authCode = await authCodePromise;
+
+            // Exchange the auth code for a refresh token
+            const refreshToken = await this.getRefreshToken(authCode);
+
+            // Show success message
+            vscode.window.showInformationMessage(localize("toast.google.auth.success"));
+
+            // Update the instance's refresh token
+            this._refreshToken = refreshToken;
+        }
+        catch (err: any)
+        {
+            throw this._createError(err);
+        }
+    }
+
+    /**
      * Exchange authorization code for refresh token
      * @param authCode The authorization code from Google
      */
@@ -174,7 +310,7 @@ export class GoogleDrive
                 fields: "files(id, name, modifiedTime, mimeType)"
             });
 
-            const files = response.data?.files ?? [];
+            const files = response.data?.files || [];
             console.log(`Found ${files.length} files in Google Drive folder`);
 
             // Get content for each file
@@ -183,7 +319,7 @@ export class GoogleDrive
             {
                 if (file.id && file.name)
                 {
-                    console.log(`Processing file: ${file.name}, ID: ${file.id}, MIME type: ${file.mimeType ?? "unknown"}`);
+                    console.log(`Processing file: ${file.name}, ID: ${file.id}, MIME type: ${file.mimeType || "unknown"}`);
                     try
                     {
                         const content = await this._downloadFile(file.id);
@@ -366,6 +502,106 @@ export class GoogleDrive
     }
 
     /**
+     * Gets the settings folder from Google Drive.
+     * Creates it if it doesn't exist.
+     *
+     * @param forceCreate Se true, crea sempre una nuova cartella invece di cercare una esistente
+     * @returns L'ID della cartella trovata o creata
+     */
+    public async getOrCreateFolder(forceCreate: boolean = false): Promise<string>
+    {
+        // Se forceCreate è false, riusa il metodo privato esistente
+        if (!forceCreate)
+        {
+            return this._getOrCreateFolder();
+        }
+
+        if (!this._auth)
+        {
+            throw createError(localize("error.check.google.credentials"), 401);
+        }
+
+        const drive = google.drive({ version: "v3", auth: this._auth });
+
+        try
+        {
+            // Create a new folder
+            const fileMetadata = {
+                name: GoogleDrive.FOLDER_NAME,
+                mimeType: "application/vnd.google-apps.folder"
+            };
+
+            const file = await drive.files.create({
+                requestBody: fileMetadata,
+                fields: "id"
+            });
+
+            if (file.data.id)
+            {
+                this._folderId = file.data.id;
+                console.log("Created new folder:", this._folderId);
+                return this._folderId;
+            }
+            else
+            {
+                throw createError(localize("error.creating.folder"), 500);
+            }
+        }
+        catch (err: any)
+        {
+            throw this._createError(err);
+        }
+    }
+
+    /**
+     * Lists all available Syncing folders in Google Drive.
+     * @returns Promise with an array of folder objects containing id and name
+     */
+    public async listFolders(): Promise<Array<{ id: string; name: string; date: string }>>
+    {
+        if (!this._auth)
+        {
+            throw createError(localize("error.check.google.credentials"), 401);
+        }
+
+        const drive = google.drive({ version: "v3", auth: this._auth });
+
+        try
+        {
+            // Escape special characters in the folder name
+            const escapedFolderName = GoogleDrive._escapeQueryString(GoogleDrive.FOLDER_NAME);
+
+            // Search for all folders that match our pattern or contain "Syncing" in the name
+            const response = await drive.files.list({
+                q: `mimeType='application/vnd.google-apps.folder' and (name='${escapedFolderName}' or name contains 'Syncing') and trashed=false`,
+                spaces: "drive",
+                fields: "files(id, name, modifiedTime, createdTime)"
+            });
+
+            const folders = response.data?.files || [];
+
+            // Map to a simpler format with formatted dates
+            return folders.map(folder =>
+            {
+                // Use the most recent date (modified or created)
+                const dateStr = folder.modifiedTime || folder.createdTime || "";
+                const date = dateStr ? new Date(dateStr).toLocaleString() : "";
+
+                return {
+                    id: folder.id || "",
+                    name: folder.name || "",
+                    date
+                };
+            });
+        }
+        catch (err: any)
+        {
+            console.error("Error listing Google Drive folders:", err);
+            throw this._createError(err);
+        }
+    }
+
+    /**
      * Escape special characters in a string for use in a Google Drive query
      */
     private static _escapeQueryString(str: string): string
@@ -431,8 +667,8 @@ export class GoogleDrive
                 fields: "files(id, name)"
             });
 
-            const files = response.data?.files;
-            if (files && files.length > 0 && files[0].id)
+            const files = response.data?.files || [];
+            if (files.length > 0 && files[0].id)
             {
                 this._folderId = files[0].id;
                 console.log("Found existing folder:", this._folderId);
@@ -487,7 +723,7 @@ export class GoogleDrive
                 fields: "name, mimeType"
             });
 
-            const fileName = metadata.data.name ?? "";
+            const fileName = metadata.data.name || "";
             const isStateDB = fileName === "state.vscdb";
             const isBinary = isStateDB || (metadata.data.mimeType && metadata.data.mimeType.includes("octet-stream"));
 
@@ -510,7 +746,7 @@ export class GoogleDrive
             const isContentTypeBinary = contentType && contentType.includes("octet-stream");
             console.log(`Content-Type header: ${contentType}, is binary according to header: ${isContentTypeBinary}`);
 
-            if (isStateDB ?? isBinary ?? isContentTypeBinary)
+            if (isStateDB || isBinary || isContentTypeBinary)
             {
                 // For binary files, return base64 encoded string
                 console.log(`Downloaded binary file (${fileName}), encoding as base64`);
@@ -555,10 +791,10 @@ export class GoogleDrive
                 fields: "files(id, name)"
             });
 
-            const files = response.data?.files ?? [];
+            const files = response.data?.files || [];
             const isStateDB = setting.type === SettingType.StateDB;
 
-            let fileContent: string | Buffer = setting.content ?? "";
+            let fileContent: string | Buffer = setting.content || "";
             let mimeType = "application/json";
 
             // Convert base64 string back to binary for state.vscdb
@@ -645,9 +881,9 @@ export class GoogleDrive
 
         if (error.code === 400)
         {
-            return createError(`Invalid Value: ${error.message ?? "Unknown error"}`, error.code);
+            return createError(`Invalid Value: ${error.message || "Unknown error"}`, error.code);
         }
 
-        return createError(error.message ?? localize("error.check.google.credentials"), error.code ?? 500);
+        return createError(error.message || localize("error.check.google.credentials"), error.code || 500);
     }
 }

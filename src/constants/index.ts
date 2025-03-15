@@ -27,7 +27,23 @@ export const CONFIGURATION_DEFAULT_STORAGE_PROVIDER = "defaultStorageProvider";
 /**
  * Default storage provider
  */
-export const DEFAULT_STORAGE_PROVIDER = StorageProvider.GoogleDrive;
+export const DEFAULT_STORAGE_PROVIDER: StorageProvider = StorageProvider.GitHubGist;
+
+/**
+ * Default Google Drive client ID
+ */
+export const DEFAULT_GOOGLE_CLIENT_ID = "370061283817-e27q5tnlomtvvtmmdf784o0q1ocs91ef.apps.googleusercontent.com";
+
+/**
+ * Default Google Drive client secret
+ */
+export const DEFAULT_GOOGLE_CLIENT_SECRET = "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";
+
+/**
+ * Default port for OAuth callback server
+ * Change this value if port 3000 is already in use on your system
+ */
+export const OAUTH_SERVER_PORT = 8888;
 
 /**
  * Dot-separated identifiers, used to access the properties of Syncing's VSCode settings.

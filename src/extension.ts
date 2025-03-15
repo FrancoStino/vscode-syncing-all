@@ -44,6 +44,9 @@ function _initCommands(context: ExtensionContext)
             {
                 _isSynchronizing = true;
 
+                // Set the last requested operation
+                _syncing.setLastRequestedOperation("upload");
+
                 // Show starting upload toast
                 Toast.statusInfo(localize("toast.settings.uploading"));
 
@@ -62,25 +65,107 @@ function _initCommands(context: ExtensionContext)
                 if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
                 {
                     // Use Google Drive
-                    if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret || !syncingSettings.google_refresh_token)
+                    if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret)
                     {
                         // Show error for missing Google Drive credentials
                         throw new Error(localize("error.missing.google.credentials"));
                     }
 
-                    const googleDrive = _syncing.getGoogleDriveClient();
+                    const googleDriveClient = _syncing.getGoogleDriveClient();
 
-                    // Pass the filtered settings directly to uploadSettings
-                    const storage = await googleDrive.uploadSettings(filteredSettings, true);
-
-                    // Salviamo solo l'ID della cartella nelle impostazioni di Syncing
-                    if (syncingSettings.id !== storage.id)
+                    // Check if we have a refresh token, if not, initiate the auth flow
+                    if (!syncingSettings.google_refresh_token)
                     {
-                        syncingSettings.id = storage.id;
-                        await _syncing.saveSettings(syncingSettings);
+                        await googleDriveClient.authenticate();
+
+                        // Dopo l'autenticazione, salvare il refresh token nelle impostazioni
+                        if (googleDriveClient.refreshToken)
+                        {
+                            syncingSettings.google_refresh_token = googleDriveClient.refreshToken;
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio di successo all'utente
+                            Toast.statusInfo(localize("toast.google.auth.success"));
+                        }
+
+                        // The auth flow will continue via the URI handler
+                        _isSynchronizing = false;
+                        return;
                     }
 
-                    Toast.statusInfo(localize("toast.settings.uploaded"));
+                    // Se non c'è l'ID della cartella, chiediamo all'utente di selezionarne una o crearne una nuova
+                    if (!syncingSettings.id)
+                    {
+                        try
+                        {
+                            // Mostra la lista delle cartelle disponibili (con true per upload)
+                            const folderId = await Toast.showGoogleDriveFolderListBox(googleDriveClient, true);
+                            if (folderId)
+                            {
+                                // Salva l'ID nella configurazione
+                                syncingSettings.id = folderId;
+                                await _syncing.saveSettings(syncingSettings);
+                                Toast.statusInfo(localize("toast.google.folder.selected"));
+                            }
+                            else
+                            {
+                                throw new Error(localize("error.no.folder.id"));
+                            }
+                        }
+                        catch (err)
+                        {
+                            if (err.message === localize("error.abort.synchronization"))
+                            {
+                                _isSynchronizing = false;
+                                return;
+                            }
+                            throw err;
+                        }
+                    }
+
+                    try
+                    {
+                        // Pass the filtered settings directly to uploadSettings
+                        const storage = await googleDriveClient.uploadSettings(filteredSettings, true);
+
+                        // Salviamo solo l'ID della cartella nelle impostazioni di Syncing
+                        if (syncingSettings.id !== storage.id)
+                        {
+                            syncingSettings.id = storage.id;
+                            await _syncing.saveSettings(syncingSettings);
+                        }
+
+                        Toast.statusInfo(localize("toast.settings.uploaded"));
+                    }
+                    catch (err)
+                    {
+                        // Controllo se l'errore è un "invalid_grant" e richiedi nuova autenticazione
+                        if (err.message && (err.message.includes("invalid_grant") || err.code === 401))
+                        {
+                            // Il token è scaduto o non valido, rimuoverlo e richiedere l'autenticazione
+                            syncingSettings.google_refresh_token = "";
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio all'utente
+                            Toast.statusInfo(localize("toast.google.auth.token.expired"));
+
+                            // Riavvia l'autenticazione
+                            const refreshGoogleDrive = _syncing.getGoogleDriveClient();
+                            await refreshGoogleDrive.authenticate();
+
+                            // Salva il nuovo token
+                            if (refreshGoogleDrive.refreshToken)
+                            {
+                                syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
+                                await _syncing.saveSettings(syncingSettings);
+                                Toast.statusInfo(localize("toast.google.auth.success"));
+                            }
+
+                            _isSynchronizing = false;
+                            return;
+                        }
+                        throw err; // Rilancia l'errore se non è un problema di token
+                    }
                 }
                 else
                 {
@@ -146,6 +231,9 @@ function _initCommands(context: ExtensionContext)
             {
                 _isSynchronizing = true;
 
+                // Set the last requested operation
+                _syncing.setLastRequestedOperation("download");
+
                 // Show starting download toast
                 Toast.statusInfo(localize("toast.settings.downloading"));
 
@@ -155,26 +243,99 @@ function _initCommands(context: ExtensionContext)
                 if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
                 {
                     // Use Google Drive
+                    const googleDriveClient = _syncing.getGoogleDriveClient();
+
+                    // Check if we have a refresh token, if not, initiate the auth flow
+                    if (!syncingSettings.google_refresh_token)
+                    {
+                        await googleDriveClient.authenticate();
+
+                        // Dopo l'autenticazione, salvare il refresh token nelle impostazioni
+                        if (googleDriveClient.refreshToken)
+                        {
+                            syncingSettings.google_refresh_token = googleDriveClient.refreshToken;
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio di successo all'utente
+                            Toast.statusInfo(localize("toast.google.auth.success"));
+                        }
+
+                        // The auth flow will continue via the URI handler
+                        _isSynchronizing = false;
+                        return;
+                    }
+
+                    // Se non c'è l'ID della cartella, chiediamo all'utente di selezionarne una
                     if (!syncingSettings.id)
                     {
-                        throw new Error(localize("error.no.storage.id"));
+                        try
+                        {
+                            // Mostra la lista delle cartelle disponibili
+                            const folderId = await Toast.showGoogleDriveFolderListBox(googleDriveClient, false);
+                            if (folderId)
+                            {
+                                // Salva l'ID nella configurazione
+                                syncingSettings.id = folderId;
+                                await _syncing.saveSettings(syncingSettings);
+                                Toast.statusInfo(localize("toast.google.folder.selected"));
+                            }
+                            else
+                            {
+                                throw new Error(localize("error.no.folder.id"));
+                            }
+                        }
+                        catch (err)
+                        {
+                            if (err.message === localize("error.abort.synchronization"))
+                            {
+                                _isSynchronizing = false;
+                                return;
+                            }
+                            throw err;
+                        }
                     }
 
-                    if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret || !syncingSettings.google_refresh_token)
+                    try
                     {
-                        throw new Error(localize("error.missing.google.credentials"));
+                        const remoteSettings = await googleDriveClient.getFiles(true);
+
+                        // 2. Download settings.
+                        const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
+
+                        Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+
+                        // 3. Restart window (after "synced").
+                        await _showRestartPrompt();
                     }
+                    catch (err)
+                    {
+                        // Controllo se l'errore è un "invalid_grant" e richiedi nuova autenticazione
+                        if (err.message && (err.message.includes("invalid_grant") || err.code === 401))
+                        {
+                            // Il token è scaduto o non valido, rimuoverlo e richiedere l'autenticazione
+                            syncingSettings.google_refresh_token = "";
+                            await _syncing.saveSettings(syncingSettings);
 
-                    const googleDrive = _syncing.getGoogleDriveClient();
-                    const remoteSettings = await googleDrive.getFiles(true);
+                            // Mostra messaggio all'utente
+                            Toast.statusInfo(localize("toast.google.auth.token.expired"));
 
-                    // 2. Download settings.
-                    const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
+                            // Riavvia l'autenticazione
+                            const refreshGoogleDrive = _syncing.getGoogleDriveClient();
+                            await refreshGoogleDrive.authenticate();
 
-                    Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+                            // Salva il nuovo token
+                            if (refreshGoogleDrive.refreshToken)
+                            {
+                                syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
+                                await _syncing.saveSettings(syncingSettings);
+                                Toast.statusInfo(localize("toast.google.auth.success"));
+                            }
 
-                    // 3. Restart window (after "synced").
-                    await _showRestartPrompt();
+                            _isSynchronizing = false;
+                            return;
+                        }
+                        throw err; // Rilancia l'errore se non è un problema di token
+                    }
                 }
                 else
                 {
