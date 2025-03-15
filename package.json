@@ -13,7 +13,7 @@
     "homepage": "https://github.com/FrancoStino/vscode-syncing",
     "license": "(MIT AND 996ICU)",
     "main": "dist/extension",
-    "icon": "resources/logo.png",
+    "icon": "resources/logo.webp",
     "repository": {
         "type": "git",
         "url": "https://github.com/FrancoStino/vscode-syncing-all"

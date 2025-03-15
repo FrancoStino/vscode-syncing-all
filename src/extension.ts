@@ -173,8 +173,8 @@ function _initCommands(context: ExtensionContext)
 
                     Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
 
-                    // 3. Reload window (after "synced").
-                    await _showReloadPrompt();
+                    // 3. Restart window (after "synced").
+                    await _showRestartPrompt();
                 }
                 else
                 {
@@ -189,8 +189,8 @@ function _initCommands(context: ExtensionContext)
 
                     Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
 
-                    // 3. Reload window (after "synced").
-                    await _showReloadPrompt();
+                    // 3. Restart window (after "synced").
+                    await _showRestartPrompt();
                 }
             }
             catch (err: any)
@@ -294,20 +294,20 @@ function _stopAutoSyncService()
 }
 
 /**
- * Shows reload prompt.
+ * Shows restart prompt.
  */
-async function _showReloadPrompt(): Promise<void>
+async function _showRestartPrompt(): Promise<void>
 {
     const reload = localize("toast.settings.show.reload.button.text");
-    const later = localize("toast.settings.show.reload.later.button.text");
     const result = await vscode.window.showInformationMessage(
         localize("toast.settings.show.reload.message"),
-        reload,
-        later
+        reload
     );
     if (result === reload)
     {
-        vscode.commands.executeCommand("workbench.action.reloadWindow");
+        // Use the restartWindow function from vscodeAPI that now performs a full application close
+        const { restartWindow } = require("./utils/vscodeAPI");
+        restartWindow();
     }
 }
 

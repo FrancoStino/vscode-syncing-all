@@ -75,7 +75,8 @@ class I18n
      */
     private _prepare()
     {
-        this._bundle = {
+        // Default hardcoded bundle as fallback
+        const defaultBundle = {
             "error.initialization": "Failed to initialize Syncing: {0}",
             "error.check.internet": "Please check your Internet connection.",
             "error.check.token": "Invalid Access Token. Please generate a new token.",
@@ -116,31 +117,49 @@ class I18n
             "toast.settings.synced.with.errors.single": "Settings synchronized with errors in: {0}",
             "toast.settings.synced.with.errors.double": "Settings synchronized with errors in: {0} and {1}",
             "toast.settings.synced.with.errors.multiple": "Settings synchronized with errors in {0} items",
-            "toast.settings.show.reload.message": "Settings have been synchronized. Would you like to reload the window to apply changes?",
-            "toast.settings.show.reload.button.text": "Reload",
-            "toast.settings.show.reload.later.button.text": "Later",
+            "toast.settings.show.reload.message": "Settings have been synchronized. Would you like to restart Cursor to apply changes?",
+            "toast.settings.show.reload.button.text": "Restart Now",
             "toast.initializing": "Initializing Syncing..."
         };
 
+        // Initialize with the default bundle
+        this._bundle = { ...defaultBundle };
+
         try
         {
-            // nls.<locale>.json
-            // Use either an existing bundle or the default bundle.
-            const defaultBundlePath = path.join(this._extensionPath, I18n._DEFAULT_LOCALE_FILENAME);
-            this._bundle = readJsonSync(defaultBundlePath);
+            // Try to load the external bundles
+            try
+            {
+                // nls.<locale>.json - load the default locale file
+                const defaultBundlePath = path.join(this._extensionPath, I18n._DEFAULT_LOCALE_FILENAME);
+                const loadedBundle = readJsonSync(defaultBundlePath);
+                // Merge with the default bundle, keeping default values if loading fails
+                this._bundle = { ...this._bundle, ...loadedBundle };
+            }
+            catch (err)
+            {
+                console.warn("Failed to load default locale file, using hardcoded strings as fallback");
+            }
 
             // Try to load localized strings if available
             try
             {
                 const localeFilename = path.join(this._extensionPath, `package.nls.${this._locale}.json`);
                 const localizedBundle = readJsonSync(localeFilename);
-                this._bundle = Object.assign(this._bundle, localizedBundle);
+                // Merge with the previously loaded bundle
+                this._bundle = { ...this._bundle, ...localizedBundle };
             }
-            catch { /* Ignore localization load errors */ }
+            catch
+            {
+                /* Ignore localization load errors */
+                console.warn(`Failed to load locale file for ${this._locale}, using default locale`);
+            }
         }
         catch (err: any)
         {
             console.error("Failed to parse the i18n bundle:", err);
+            // Ensure we still have the default bundle
+            this._bundle = { ...defaultBundle };
         }
     }
 }

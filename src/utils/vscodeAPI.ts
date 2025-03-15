@@ -144,11 +144,69 @@ export function openFile(filepath: string)
 }
 
 /**
- * Reloads the VSCode window.
+ * Closes VSCode and restarts it automatically.
+ * This approach uses Node.js child_process to spawn a new instance after the current one closes.
+ */
+export function restartWindow()
+{
+    // Import Node.js modules for process management
+    const { spawn } = require("child_process");
+    const path = require("path");
+    const fs = require("fs");
+
+    // Show a message to confirm the user wants to restart VSCode completely
+    vscode.window.showInformationMessage(
+        "To apply changes, Cursor will be restarted automatically.",
+        "Restart Now"
+    ).then(selection =>
+    {
+        if (selection === "Restart Now")
+        {
+            // Get the current executable path
+            const execPath = process.env.APPIMAGE ?? process.execPath;
+
+            // Create a temporary restart script
+            const tempDir = require("os").tmpdir();
+            const scriptPath = path.join(tempDir, "restart-cursor.sh");
+
+            // The script waits a moment and then launches the application again
+            const scriptContent = `#!/bin/bash
+# Wait for the application to close
+sleep 1
+# Start the application again
+"${execPath}" &
+# Remove this temporary script
+rm "$0"
+            `;
+
+            // Write the script to a temporary file
+            fs.writeFileSync(scriptPath, scriptContent);
+            fs.chmodSync(scriptPath, "755"); // Make executable
+
+            // Execute the script in background before quitting
+            spawn("/bin/bash", [scriptPath], {
+                detached: true,
+                stdio: "ignore"
+            }).unref();
+
+            // Now close the app - the script will restart it
+            vscode.commands.executeCommand("workbench.action.quit")
+                .then(undefined, (error) =>
+                {
+                    console.error("Error with quit command:", error);
+                    vscode.commands.executeCommand("workbench.action.closeWindow");
+                });
+        }
+    });
+}
+
+/**
+ * @deprecated Use restartWindow() instead
+ * For backward compatibility.
  */
 export function reloadWindow()
 {
-    vscode.commands.executeCommand("workbench.action.reloadWindow");
+    restartWindow();
 }
 
 /**

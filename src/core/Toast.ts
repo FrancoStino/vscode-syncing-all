@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 
 import { formatDistance } from "../utils/date";
 import { locale, localize } from "../i18n";
-import { reloadWindow } from "../utils/vscodeAPI";
+import { restartWindow } from "../utils/vscodeAPI";
 import type { Gist } from "./Gist";
 
 /**
@@ -198,9 +198,9 @@ export async function showRemoteStorageListBox(api: Gist, forUpload: boolean = t
 }
 
 /**
- * Shows a `Reload VSCode` prompt dialog.
+ * Shows a `Restart VSCode` prompt dialog.
  */
-export function showReloadBox(): void
+export function showRestartBox(): void
 {
     const reloadButton = localize("toast.box.reload");
     const message = localize("toast.box.reload.message");
@@ -208,9 +208,18 @@ export function showReloadBox(): void
     {
         if (selection === reloadButton)
         {
-            reloadWindow();
+            restartWindow();
         }
     });
+}
+
+/**
+ * @deprecated Use showRestartBox() instead
+ * For backward compatibility.
+ */
+export function showReloadBox(): void
+{
+    showRestartBox();
 }
 
 /**

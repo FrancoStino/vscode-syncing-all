@@ -20,8 +20,8 @@
     "toast.box.enter.github.token.download": "Enter GitHub Personal Access Token (Leave it blank to download from a public Gist).",
     "toast.box.enter.github.token.upload": "Enter GitHub Personal Access Token.",
     "toast.box.gist.last.uploaded": "Last uploaded {0}.",
-    "toast.box.reload": "Reload Now",
-    "toast.box.reload.message": "Settings are successfully synced. Please reload VSCode to take effect.",
+    "toast.box.reload": "Restart Now",
+    "toast.box.reload.message": "Settings are successfully synced. Please restart VSCode to take effect.",
     "toast.settings.autoSync.checkingSettings": "Syncing: Automatically checking your settings...",
     "toast.settings.autoSync.failed": "Syncing: Auto-sync failed. {0}",
     "toast.settings.autoSync.nothingChanged": "Syncing: Nothing changed since the last synchronization.",
@@ -68,5 +68,9 @@
     "pokaYoke.continue.download.message": "A lot of changes have been made since your last sync. Are you sure to OVERWRITE THE LOCAL SETTINGS?",
     "pokaYoke.continue.upload": "Continue to upload",
     "pokaYoke.continue.upload.message": "A lot of changes have been made since your last sync. Are you sure to OVERWRITE THE REMOTE SETTINGS?",
-    "error.github.oauth.failed": "GitHub OAuth authentication failed: {0}"
+    "error.github.oauth.failed": "GitHub OAuth authentication failed: {0}",
+    "toast.settings.synced.with.errors.double": "Settings synchronized with errors in: {0} and {1}",
+    "toast.settings.synced.with.errors.multiple": "Settings synchronized with errors in {0} items",
+    "toast.settings.show.reload.message": "Settings have been synchronized. Would you like to restart Cursor to apply changes?",
+    "toast.settings.show.reload.button.text": "Restart Now"
 }

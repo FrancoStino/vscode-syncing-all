@@ -20,8 +20,8 @@
     "toast.box.enter.github.token.download": "请输入您的 GitHub Personal Access Token（如果您想从一个公开的 Gist 下载配置，请留空）",
     "toast.box.enter.github.token.upload": "请输入您的 GitHub Personal Access Token",
     "toast.box.gist.last.uploaded": "最后上传于 {0}",
-    "toast.box.reload": "重新加载窗口",
-    "toast.box.reload.message": "配置已成功同步，请重新加载 VSCode 以让配置生效。",
+    "toast.box.reload": "重新启动窗口",
+    "toast.box.reload.message": "配置已成功同步，请重新启动 VSCode 以让配置生效。",
     "toast.settings.autoSync.checkingSettings": "Syncing: 正在自动检查您的配置...",
     "toast.settings.autoSync.failed": "Syncing: 自动同步失败: {0}",
     "toast.settings.autoSync.nothingChanged": "Syncing: 未检测到任何配置变更，您已正在使用最新配置。",
@@ -68,5 +68,7 @@
     "pokaYoke.continue.download.message": "即将下载的配置与本地配置之间存在较大差异，确定要继续下载并覆盖本地配置吗?",
     "pokaYoke.continue.upload": "继续上传",
     "pokaYoke.continue.upload.message": "即将上传的配置与云端配置之间存在较大差异，确定要继续上传并覆盖云端配置吗?",
-    "error.github.oauth.failed": "GitHub OAuth 认证失败: {0}"
+    "error.github.oauth.failed": "GitHub OAuth 认证失败: {0}",
+    "toast.settings.show.reload.message": "设置已成功同步。您想要重启 Cursor 以应用更改吗？",
+    "toast.settings.show.reload.button.text": "立即重启"
 }
