@@ -1,4 +1,9 @@
 
+## [v0.0.3] - 2025-03-15
+### New Features
+- [`99e50d9`](https://github.com/FrancoStino/vscode-syncing-all/commit/99e50d9c924b498a90fad50671de47ad20c4935f) - Bump package version *(commit by [@FrancoStino](https://github.com/FrancoStino))*
+
+
 ## [v0.0.2] - 2025-03-07
 ### Other Changes
 - [`c988cb9`](https://github.com/FrancoStino/vscode-syncing-all/commit/c988cb92c106ff7657248fdbb187445ad92f9dc8) - Get All Extension *(commit by [@FrancoStino](https://github.com/FrancoStino))*
@@ -17,3 +22,4 @@
 
 [v0.0.1]: https://github.com/FrancoStino/vscode-syncing-all/compare/v3.3.9...v0.0.1
 [v0.0.2]: https://github.com/FrancoStino/vscode-syncing-all/compare/v0.0.1...v0.0.2
+[v0.0.3]: https://github.com/FrancoStino/vscode-syncing-all/compare/v0.0.2...v0.0.3
