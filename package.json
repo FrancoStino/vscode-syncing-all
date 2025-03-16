@@ -37,12 +37,6 @@
     ],
     "activationEvents": [
         "onStartupFinished",
-        
-        
-        
-        
-        
-        
         "onUri"
     ],
     "contributes": {
@@ -125,7 +119,10 @@
                     },
                     "syncing.autoSync.unit": {
                         "type": "string",
-                        "enum": ["minutes", "hours"],
+                        "enum": [
+                            "minutes",
+                            "hours"
+                        ],
                         "default": "minutes",
                         "description": "Time unit for automatic synchronization interval"
                     }

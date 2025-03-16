@@ -160,41 +160,38 @@ export class GoogleDrive
 
                             const htmlResponse = `
                                 <html>
-                                <head>
-                                    <title>Authentication completed</title>
-                                    <style>
-                                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-                                        h1 { color: #4285f4; }
-                                        p { margin: 20px 0; }
-                                        .status { font-weight: bold; }
-                                        .instructions { background-color: #f1f1f1; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: left; }
-                                        .cmd { background-color: #e0e0e0; padding: 3px 6px; border-radius: 3px; font-family: monospace; }
-                                    </style>
-                                </head>
-                                <body>
-                                    <h1>Authentication completed</h1>
-                                    <p>L'autenticazione a Google Drive è stata completata con successo!</p>
-                                    
-                                    <div class="instructions">
-                                        <p><strong>Cosa succederà ora:</strong></p>
-                                        <ol>
-                                            <li>Torna a Cursor</li>
-                                            <li>L'operazione interrotta riprenderà automaticamente</li>
-                                            <li>Se l'operazione non riprende entro pochi secondi, puoi anche eseguire manualmente il comando di upload o download</li>
-                                        </ol>
-                                    </div>
-                                    
-                                    <p class="status">Status: <span id="status">Autenticazione completata con successo</span></p>
-                                    
-                                    <script>
-                                        // Questa pagina di callback è puramente informativa
-                                        setTimeout(() => {
-                                            document.getElementById('status').textContent = 
-                                                'Puoi chiudere questa finestra e tornare a Cursor';
-                                        }, 2000);
-                                    </script>
-                                </body>
-                                </html>
+<head>
+<title>Authentication completed</title>
+<style>
+body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+h1 { color: #4285f4; }
+p { margin: 20px 0; }
+.status { font-weight: bold; }
+.instructions { background-color: #f1f1f1; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: left; }
+.cmd { background-color: #e0e0e0; padding: 3px 6px; border-radius: 3px; font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>Authentication completed</h1>
+<p>Authentication to Google Drive has been completed successfully!</p>
+<div class="instructions">
+<p><strong>What happens now:</strong></p>
+<ol>
+<li>Return to your IDE</li>
+<li>The interrupted operation will resume automatically</li>
+<li>If the operation doesn't resume within a few seconds, you can also manually execute the upload or download command</li>
+</ol>
+</div>
+<p class="status">Status: <span id="status">Authentication completed successfully</span></p>
+<script>
+// This callback page is purely informational
+setTimeout(() => {
+document.getElementById('status').textContent =
+'You can close this window and return to your IDE';
+}, 2000);
+</script>
+</body>
+</html>
                             `;
 
                             res.end(htmlResponse);

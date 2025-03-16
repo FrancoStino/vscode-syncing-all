@@ -118,7 +118,7 @@ class I18n
             "toast.settings.synced.with.errors.single": "Settings synchronized with errors in: {0}",
             "toast.settings.synced.with.errors.double": "Settings synchronized with errors in: {0} and {1}",
             "toast.settings.synced.with.errors.multiple": "Settings synchronized with errors in {0} items",
-            "toast.settings.show.reload.message": "Settings have been synchronized. Would you like to restart Cursor to apply changes?",
+            "toast.settings.show.reload.message": "Settings have been synchronized. Would you like to restart your IDE to apply changes?",
             "toast.settings.show.reload.button.text": "Restart Now",
             "toast.initializing": "Initializing Syncing...",
 
