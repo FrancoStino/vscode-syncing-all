@@ -107,10 +107,10 @@ export function showSpinner(message: string, progress?: number, total?: number):
 {
     clearSpinner();
 
-    // Verifica se è un messaggio di autenticazione per Google Drive
+    // Check if it's an authentication message for Google Drive
     if (message.includes("Google Drive") && message.includes("autenticazione"))
     {
-        // Per i messaggi di autenticazione, mostra un messaggio più evidente
+        // For authentication messages, show a more prominent message
         vscode.window.showInformationMessage(`🔄 ${message}`, { modal: false });
     }
 
@@ -333,34 +333,34 @@ interface IFileItem extends vscode.QuickPickItem
  */
 function parseLocalizedDate(dateStr: string): Date
 {
-    // Verifica se la data è nel formato italiano (GG/MM/AAAA, HH:MM:SS)
+    // Check if the date is in Italian format (DD/MM/YYYY, HH:MM:SS)
     const italianDateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
     const match = dateStr.match(italianDateRegex);
 
     if (match)
     {
-        // Estrai i componenti della data dal match
+        // Extract date components from the match
         const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10) - 1; // Mesi in JS sono 0-indexed
+        const month = parseInt(match[2], 10) - 1; // Months in JS are 0-indexed
         const year = parseInt(match[3], 10);
         const hour = parseInt(match[4], 10);
         const minute = parseInt(match[5], 10);
         const second = parseInt(match[6], 10);
 
-        // Crea una data valida usando i componenti numerici
+        // Create a valid date using numeric components
         const date = new Date(year, month, day, hour, minute, second);
-        console.log(`Data convertita da ${dateStr} a ${date.toISOString()}`);
+        console.log(`Date converted from ${dateStr} to ${date.toISOString()}`);
         return date;
     }
 
-    // Se non è nel formato italiano, prova il parser standard di JS
+    // If not in Italian format, try standard JS parser
     const date = new Date(dateStr);
 
-    // Verifica che la data sia valida
+    // Verify the date is valid
     if (isNaN(date.getTime()))
     {
-        console.error(`Impossibile analizzare la data: ${dateStr}`);
-        // Ritorna la data corrente come fallback
+        console.error(`Unable to parse date: ${dateStr}`);
+        // Return current date as fallback
         return new Date();
     }
 
@@ -442,26 +442,26 @@ export async function showRevisionsQuickPick(googleDrive: any, fileId: string, f
             return undefined;
         }
 
-        // Debug: verifica i dati delle revisioni
-        console.log("Revisioni ricevute:", revisions);
+        // Debug: verify revision data
+        console.log("Revisions received:", revisions);
 
         const items: IRevisionItem[] = revisions.map((revision: IGoogleDriveRevision) =>
         {
-            // Gestione più sicura delle date
-            let dateLabel = "Data non disponibile";
+            // Safer date handling
+            let dateLabel = "Date not available";
             try
             {
-                // Controllo che modifiedTime esista e sia una stringa valida
+                // Check that modifiedTime exists and is a valid string
                 if (revision.modifiedTime)
                 {
-                    // Usa il parser personalizzato per gestire il formato italiano
+                    // Use custom parser to handle Italian format
                     const date = parseLocalizedDate(revision.modifiedTime);
                     dateLabel = date.toLocaleString();
                 }
             }
             catch (error)
             {
-                console.error("Errore nella conversione della data:", error);
+                console.error("Error converting date:", error);
             }
 
             return {
@@ -535,27 +535,27 @@ export async function showDatesQuickPick(googleDrive: any): Promise<string | und
                 {
                     try
                     {
-                        // Verifica che modifiedTime esista e sia una stringa valida
+                        // Check that modifiedTime exists and is a valid string
                         if (revision.modifiedTime)
                         {
-                            // Usa il parser personalizzato per gestire il formato italiano
+                            // Use custom parser to handle Italian format
                             const revDate = parseLocalizedDate(revision.modifiedTime);
 
-                            // Usa toLocaleDateString per estrarre solo la data (senza l'ora)
+                            // Use toLocaleDateString to extract only the date (without time)
                             const dateOnly = revDate.toLocaleDateString();
                             allDates.add(dateOnly);
-                            console.log(`Data aggiunta: ${dateOnly} da ${revision.modifiedTime}`);
+                            console.log(`Date added: ${dateOnly} from ${revision.modifiedTime}`);
                         }
                     }
                     catch (dateError)
                     {
-                        console.error("Errore nell'elaborazione della data:", dateError);
+                        console.error("Error processing date:", dateError);
                     }
                 }
             }
             catch (fileError)
             {
-                console.error(`Errore nel recupero delle revisioni per il file ${fileId}:`, fileError);
+                console.error(`Error retrieving revisions for file ${fileId}:`, fileError);
             }
         }
 
@@ -578,12 +578,12 @@ export async function showDatesQuickPick(googleDrive: any): Promise<string | und
             }
             catch (error)
             {
-                console.error("Errore durante l'ordinamento delle date:", error);
+                console.error("Error sorting dates:", error);
                 return 0;
             }
         });
 
-        console.log("Date ordinate:", sortedDates);
+        console.log("Sorted dates:", sortedDates);
 
         const items = sortedDates.map(date => ({
             label: date,

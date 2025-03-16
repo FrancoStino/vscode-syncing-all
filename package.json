@@ -37,12 +37,12 @@
     ],
     "activationEvents": [
         "onStartupFinished",
-        "onCommand:syncing.uploadSettings",
-        "onCommand:syncing.downloadSettings",
-        "onCommand:syncing.openSettings",
-        "onCommand:syncing.restoreFileVersion",
-        "onCommand:syncing.restoreAllSettingsToDate",
-        "onCommand:syncing.resetSyncState",
+        
+        
+        
+        
+        
+        
         "onUri"
     ],
     "contributes": {

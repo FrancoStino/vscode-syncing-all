@@ -16,12 +16,12 @@ import type {
     StorageUpdateParam
 } from "./RemoteStorageTypes";
 
-// Type aliases for backward compatibility with existing code that referred to Gist
+// Type aliases for backward compatibility with existing code
 // Now they refer to Google Drive storage
-export type IGist = IRemoteStorage;
-export type IGistFiles = IRemoteFiles;
-export type IGistFile = IRemoteFile;
-export type IGistUser = IStorageUser;
-export type IGistHistory = IStorageHistory;
-export type GistCreateParam = StorageCreateParam;
-export type GistUpdateParam = StorageUpdateParam;
+export type IGoogleDrive = IRemoteStorage;
+export type IGoogleDriveFiles = IRemoteFiles;
+export type IGoogleDriveFile = IRemoteFile;
+export type IGoogleDriveUser = IStorageUser;
+export type IGoogleDriveHistory = IStorageHistory;
+export type GoogleDriveCreateParam = StorageCreateParam;
+export type GoogleDriveUpdateParam = StorageUpdateParam;

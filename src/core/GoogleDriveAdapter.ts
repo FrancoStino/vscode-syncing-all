@@ -1,17 +1,14 @@
-// Adapter per mantenere la compatibilità con la vecchia interfaccia Gist
-// Delega tutte le operazioni alla classe GoogleDrive
-
+// Adapter to maintain compatibility with the old Gist interface
+// Delegates all operations to the GoogleDrive class
 import { GoogleDrive } from "./GoogleDrive";
 import type { ISetting, IRemoteStorage } from "../types";
-
 /**
- * Adapter che mantiene la compatibilità con la vecchia interfaccia Gist
- * Delega tutte le operazioni alla classe GoogleDrive
+ * Adapter that maintains compatibility with the old Gist interface
+ * Delegates all operations to the GoogleDrive class
  */
 export class GoogleDriveAdapter
 {
     private _googleDrive: GoogleDrive;
-
     constructor()
     {
         this._googleDrive = GoogleDrive.create();
@@ -19,21 +16,21 @@ export class GoogleDriveAdapter
 
     /**
      * Creates a GoogleDrive instance
-     * @param _token Non utilizzato, mantenuto per compatibilità
-     * @param _proxy Non utilizzato, mantenuto per compatibilità
-     * @returns Istanza di GoogleDriveAdapter che wrappa GoogleDrive
+     * @param _token Not used, maintained for compatibility
+     * @param _proxy Not used, maintained for compatibility
+     * @returns Instance of GoogleDriveAdapter that wraps GoogleDrive
      */
     public static create(_token?: string, _proxy?: string): GoogleDriveAdapter
     {
-        // Questa classe ora è un adapter per GoogleDrive
+        // This class is now an adapter for GoogleDrive
         return new GoogleDriveAdapter();
     }
 
     /**
      * Gets settings from Google Drive.
-     * @param _id ID cartella (non utilizzato)
-     * @param showIndicator Indica se mostrare un indicatore di caricamento
-     * @returns Le impostazioni remote
+     * @param _id Folder ID (not used)
+     * @param showIndicator Indicates whether to show a loading indicator
+     * @returns The remote settings
      */
     public async get(_id: string, showIndicator: boolean = false): Promise<IRemoteStorage>
     {
@@ -42,8 +39,8 @@ export class GoogleDriveAdapter
 
     /**
      * Checks if settings exist in Google Drive.
-     * @param id ID cartella (non utilizzato)
-     * @returns Impostazioni o false se non trovate
+     * @param id Folder ID (not used)
+     * @returns Settings or false if not found
      */
     public async exists(id?: string): Promise<IRemoteStorage | false>
     {
@@ -52,28 +49,28 @@ export class GoogleDriveAdapter
 
     /**
      * Finds and updates settings in Google Drive.
-     * @param _id ID cartella (non utilizzato)
-     * @param settings Impostazioni da aggiornare
-     * @param _isPublic Non utilizzato, mantenuto per compatibilità
-     * @param showIndicator Indica se mostrare un indicatore di caricamento
-     * @returns Impostazioni aggiornate
+     * @param _id Folder ID (not used)
+     * @param settings Settings to update
+     * @param _isPublic Not used, maintained for compatibility
+     * @param showIndicator Indicates whether to show a loading indicator
+     * @returns Updated settings
      */
     public async findAndUpdate(_id: string, settings: ISetting[], _isPublic: boolean = false, showIndicator: boolean = false): Promise<IRemoteStorage>
     {
-        // Utilizziamo il metodo uploadSettings di GoogleDrive
+        // We use the uploadSettings method of GoogleDrive
         return this._googleDrive.uploadSettings(settings, showIndicator);
     }
 
     /**
      * Creates settings in Google Drive.
-     * @param settings Impostazioni da creare
-     * @param _isPublic Non utilizzato, mantenuto per compatibilità
-     * @param showIndicator Indica se mostrare un indicatore di caricamento
-     * @returns Impostazioni create
+     * @param settings Settings to create
+     * @param _isPublic Not used, maintained for compatibility
+     * @param showIndicator Indicates whether to show a loading indicator
+     * @returns Created settings
      */
     public async createSettings(settings: ISetting[], _isPublic: boolean = false, showIndicator: boolean = false): Promise<IRemoteStorage>
     {
-        // Utilizziamo il metodo uploadSettings di GoogleDrive
+        // We use the uploadSettings method of GoogleDrive
         return this._googleDrive.uploadSettings(settings, showIndicator);
     }
 }

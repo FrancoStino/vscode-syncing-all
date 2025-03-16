@@ -447,9 +447,9 @@ function _initCommands(context: ExtensionContext)
 
                         // Verifica se le impostazioni remote sono più recenti di quelle locali
                         console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
-                        const gistSetting = VSCodeSetting.create();
-                        const localSettings = await gistSetting.getSettings();
-                        const localLastModified = gistSetting.getLastModified(localSettings);
+                        const driveSettings = VSCodeSetting.create();
+                        const localSettings = await driveSettings.getSettings();
+                        const localLastModified = driveSettings.getLastModified(localSettings);
                         const remoteLastModified = new Date(downloadedRemoteSettings.updated_at).getTime();
 
                         console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
@@ -887,14 +887,26 @@ function _initAutoSync()
         vscode.commands.executeCommand("syncing.downloadSettings");
     });
 
-    // Avvia il servizio di auto-sincronizzazione
-    console.log("[DEBUG] Avvio del servizio AutoSync");
-    _autoSyncService.start();
+    // Check if auto-sync is enabled in settings before starting the service
+    const settings = _syncing.loadSettings();
+    const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+
+    if (settings.auto_sync || autoSyncEnabled)
+    {
+        console.log("[DEBUG] Auto-sync è abilitato nelle impostazioni, avvio del servizio");
+        // Avvia il servizio di auto-sincronizzazione
+        console.log("[DEBUG] Avvio del servizio AutoSync");
+        _autoSyncService.start();
+    }
+    else
+    {
+        console.log("[DEBUG] Auto-sync non è abilitato nelle impostazioni, non avvio del servizio");
+    }
 
     // FORCE START 1: Avvio forzato del servizio dopo 10 secondi per garantire che si avvii
     setTimeout(() =>
     {
-        console.log("[DEBUG] BOOTSTRAP 1: Avvio forzato del servizio AutoSync");
+        console.log("[DEBUG] BOOTSTRAP 1: Verifica stato del servizio AutoSync");
         if (_autoSyncService)
         {
             console.log("[DEBUG] Verifica stato pre-bootstrap:");
@@ -902,8 +914,19 @@ function _initAutoSync()
             console.log("[DEBUG] - _isSynchronizing:", _isSynchronizing);
             console.log("[DEBUG] - autoSyncService.isRunning():", _autoSyncService.isRunning());
 
-            // Forza l'avvio anche se non siamo pronti
-            _autoSyncService.start();
+            // Controlla di nuovo le impostazioni per sicurezza
+            const currentSettings = _syncing.loadSettings();
+            const isAutoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+
+            // Forza l'avvio solo se auto-sync è abilitato
+            if (currentSettings.auto_sync || isAutoSyncEnabled)
+            {
+                _autoSyncService.start();
+            }
+            else
+            {
+                console.log("[DEBUG] Auto-sync non abilitato, non forzo l'avvio");
+            }
 
             // Esegui subito un controllo e avvia un upload
             setTimeout(() =>
@@ -930,15 +953,15 @@ function _initAutoSync()
     setInterval(() =>
     {
         // Verifica se l'autoSync è abilitato
-        const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+        const periodicAutoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
         console.log("[DEBUG] Timer di controllo principale:");
         console.log("[DEBUG] - _isReady:", _isReady);
-        console.log("[DEBUG] - autoSyncEnabled:", autoSyncEnabled);
+        console.log("[DEBUG] - autoSyncEnabled:", periodicAutoSyncEnabled);
         console.log("[DEBUG] - _autoSyncService:", !!_autoSyncService);
         console.log("[DEBUG] - isRunning:", _autoSyncService ? _autoSyncService.isRunning() : false);
 
         // Se l'estensione è pronta, autoSync è abilitato, ma il servizio non è in esecuzione
-        if (_isReady && autoSyncEnabled && _autoSyncService && !_autoSyncService.isRunning())
+        if (_isReady && periodicAutoSyncEnabled && _autoSyncService && !_autoSyncService.isRunning())
         {
             console.log("[DEBUG] BOOTSTRAP PERIODICO: Riavvio forzato del servizio AutoSync");
             _autoSyncService.start();
@@ -968,11 +991,11 @@ function _initAutoSync()
         console.log("[DEBUG] - autoSyncService.isRunning():", _autoSyncService.isRunning());
 
         // Verifica se l'autoSync è abilitato
-        const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
-        console.log("[DEBUG] - autoSyncEnabled:", autoSyncEnabled);
+        const statusCheckAutoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+        console.log("[DEBUG] - autoSyncEnabled:", statusCheckAutoSyncEnabled);
 
         // Se autoSync è abilitato ma il servizio non è in esecuzione, avviarlo
-        if (autoSyncEnabled && _isReady && !_isSynchronizing && !_autoSyncService.isRunning())
+        if (statusCheckAutoSyncEnabled && _isReady && !_isSynchronizing && !_autoSyncService.isRunning())
         {
             console.log("[DEBUG] Riavvio automatico del servizio AutoSync");
             _autoSyncService.start();

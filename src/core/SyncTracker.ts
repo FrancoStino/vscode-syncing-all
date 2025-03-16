@@ -10,7 +10,7 @@ interface ISyncState
 }
 
 /**
- * Classe che gestisce il tracciamento intelligente della sincronizzazione
+ * Class that manages intelligent synchronization tracking
  */
 export class SyncTracker
 {
@@ -23,7 +23,7 @@ export class SyncTracker
     private constructor()
     {
         this._env = Environment.create();
-        // Creiamo il file nella stessa directory delle impostazioni utente
+        // Create the file in the same directory as user settings
         this._timestampFilePath = path.join(
             this._env.userDirectory,
             "sync-tracker.json"
@@ -32,7 +32,7 @@ export class SyncTracker
     }
 
     /**
-     * Ottiene il nome del file remoto per il tracking
+     * Gets the remote filename for tracking
      */
     public get remoteFilename(): string
     {
@@ -40,7 +40,7 @@ export class SyncTracker
     }
 
     /**
-     * Crea o ottiene l'istanza singleton di SyncTracker
+     * Creates or gets the SyncTracker singleton instance
      */
     public static create(): SyncTracker
     {
@@ -52,7 +52,7 @@ export class SyncTracker
     }
 
     /**
-     * Ottiene il contenuto del tracker per il caricamento su remoto
+     * Gets the tracker content for uploading to remote
      */
     public getContent(): string
     {
@@ -60,8 +60,8 @@ export class SyncTracker
     }
 
     /**
-     * Aggiorna il tracker con i dati ricevuti dal remoto
-     * @param content Contenuto del file remoto
+     * Updates the tracker with data received from remote
+     * @param content Content of the remote file
      */
     public updateFromRemote(content: string): void
     {
@@ -69,66 +69,66 @@ export class SyncTracker
         {
             const remoteState = JSON.parse(content) as ISyncState;
 
-            // Se il timestamp remoto è più recente di quello locale, lo usiamo
+            // If the remote timestamp is more recent than the local one, we use it
             if (remoteState.lastSyncTimestamp > this._syncState.lastSyncTimestamp)
             {
-                console.log("[DEBUG] SyncTracker: Aggiornamento con stato remoto più recente");
+                console.log("[DEBUG] SyncTracker: Updating with more recent remote state");
                 this._syncState = remoteState;
                 this._saveState();
             }
             else
             {
-                console.log("[DEBUG] SyncTracker: Stato locale più recente del remoto");
+                console.log("[DEBUG] SyncTracker: Local state more recent than remote");
             }
         }
         catch (err)
         {
-            console.error("Errore nell'aggiornamento da remoto:", err);
+            console.error("Error in remote update:", err);
         }
     }
 
     /**
-     * Aggiorna il timestamp e gli hash dei file
-     * @param files Elenco dei file con i loro contenuti
+     * Updates the timestamp and file hashes
+     * @param files List of files with their contents
      */
     public updateSyncState(files: Record<string, string | Buffer>): void
     {
-        // Aggiorna il timestamp
+        // Update timestamp
         this._syncState.lastSyncTimestamp = Date.now();
 
-        // Aggiorna gli hash dei file
+        // Update file hashes
         for (const [filename, content] of Object.entries(files))
         {
             this._syncState.fileHashes[filename] = this._calculateHash(content);
         }
 
-        // Salva lo stato
+        // Save state
         this._saveState();
     }
 
     /**
-     * Verifica se i file remoti sono effettivamente diversi da quelli locali
-     * @param files Elenco dei file remoti con i loro contenuti
-     * @param remoteTimestamp Timestamp remoto
-     * @returns True se è necessario scaricare, false altrimenti
+     * Checks if remote files are actually different from local ones
+     * @param files List of remote files with their contents
+     * @param remoteTimestamp Remote timestamp
+     * @returns True if download is necessary, false otherwise
      */
     public shouldDownload(files: Record<string, string | Buffer>, remoteTimestamp: number): boolean
     {
-        // Se non abbiamo mai sincronizzato, dobbiamo farlo
+        // If we have never synchronized, we need to do it
         if (this._syncState.lastSyncTimestamp === 0)
         {
-            console.log("[DEBUG] SyncTracker: Prima sincronizzazione, download necessario");
+            console.log("[DEBUG] SyncTracker: First synchronization, download required");
             return true;
         }
 
-        // Se il timestamp remoto è più vecchio di quello locale, non serve scaricare
+        // If the remote timestamp is older than the local one, no need to download
         if (remoteTimestamp <= this._syncState.lastSyncTimestamp)
         {
-            console.log("[DEBUG] SyncTracker: Timestamp remoto non più recente, download non necessario");
+            console.log("[DEBUG] SyncTracker: Remote timestamp not more recent, download not necessary");
             return false;
         }
 
-        // Verifica se il contenuto è effettivamente cambiato
+        // Check if the content has actually changed
         let hasChanges = false;
 
         for (const [filename, content] of Object.entries(files))
@@ -138,7 +138,7 @@ export class SyncTracker
 
             if (!storedHash || currentHash !== storedHash)
             {
-                console.log(`[DEBUG] SyncTracker: Rilevate modifiche nel file ${filename}`);
+                console.log(`[DEBUG] SyncTracker: Changes detected in file ${filename}`);
                 hasChanges = true;
                 break;
             }
@@ -146,14 +146,14 @@ export class SyncTracker
 
         if (!hasChanges)
         {
-            console.log("[DEBUG] SyncTracker: Nessuna modifica effettiva nei file, download non necessario");
+            console.log("[DEBUG] SyncTracker: No actual changes in files, download not necessary");
         }
 
         return hasChanges;
     }
 
     /**
-     * Ottiene l'ultimo timestamp di sincronizzazione
+     * Gets the last synchronization timestamp
      */
     public getLastSyncTimestamp(): number
     {
@@ -161,8 +161,8 @@ export class SyncTracker
     }
 
     /**
-     * Calcola l'hash di un file
-     * @param content Contenuto del file
+     * Calculates a file hash
+     * @param content File content
      */
     private _calculateHash(content: string | Buffer): string
     {
@@ -173,7 +173,7 @@ export class SyncTracker
 
 
     /**
-     * Carica lo stato di sincronizzazione dal file
+     * Loads the synchronization state from file
      */
     private _loadState(): ISyncState
     {
@@ -187,10 +187,10 @@ export class SyncTracker
         }
         catch (err)
         {
-            console.error("Errore nel caricamento dello stato di sincronizzazione:", err);
+            console.error("Error loading synchronization state:", err);
         }
 
-        // Stato predefinito se il file non esiste o è corrotto
+        // Default state if file doesn't exist or is corrupted
         return {
             lastSyncTimestamp: 0,
             fileHashes: {}
@@ -198,7 +198,7 @@ export class SyncTracker
     }
 
     /**
-     * Salva lo stato di sincronizzazione
+     * Saves the synchronization state
      */
     private _saveState(): void
     {
@@ -212,7 +212,7 @@ export class SyncTracker
         }
         catch (err)
         {
-            console.error("Errore nel salvataggio dello stato di sincronizzazione:", err);
+            console.error("Error saving synchronization state:", err);
         }
     }
 }

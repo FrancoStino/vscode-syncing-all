@@ -22,7 +22,7 @@ import { localize } from "../i18n";
 import { readLastModified, writeLastModified } from "../utils/file";
 import { SettingType } from "../types";
 import * as Toast from "./Toast";
-import type { IExtension, ISetting, ISyncedItem, IGist as IRemoteStorage, IGistFile as IRemoteFile } from "../types";
+import type { IExtension, ISetting, ISyncedItem, IGoogleDrive as IRemoteStorage, IGoogleDriveFile as IRemoteFile } from "../types";
 import { SyncTracker } from "./SyncTracker";
 
 /**

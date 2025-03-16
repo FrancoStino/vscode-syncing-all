@@ -95,7 +95,7 @@ export class Syncing
      */
     public get storageProvider(): StorageProvider
     {
-        return this.loadSettings().storage_provider ?? StorageProvider.GitHubGist;
+        return this.loadSettings().storage_provider ?? StorageProvider.GoogleDrive;
     }
 
     /**
@@ -230,21 +230,21 @@ export class Syncing
         {
             const settings = this.loadSettings();
 
-            // Imposta sempre Google Drive come provider
+            // Always set Google Drive as the provider
             settings.storage_provider = StorageProvider.GoogleDrive;
 
-            // Gestisci le credenziali di Google Drive
+            // Handle Google Drive credentials
             if (settings.storage_provider === StorageProvider.GoogleDrive)
             {
-                // Se non ci sono credenziali, usa quelle di default
+                // If there are no credentials, use the default ones
                 if (!settings.google_client_id || !settings.google_client_secret)
                 {
                     settings.google_client_id = DEFAULT_GOOGLE_CLIENT_ID;
                     settings.google_client_secret = DEFAULT_GOOGLE_CLIENT_SECRET;
                 }
 
-                // Se non c'è un refresh token, l'autenticazione verrà gestita da GoogleDrive
-                // Se non c'è un ID cartella, la selezione verrà gestita da GoogleDrive
+                // If there is no refresh token, authentication will be handled by GoogleDrive
+                // If there is no folder ID, selection will be handled by GoogleDrive
             }
 
             await this.saveSettings(settings, true);
@@ -324,7 +324,7 @@ export class Syncing
             target.http_proxy = "";
         }
 
-        // Non salvare mai client ID e secret nel file syncing.json
+        // Never save client ID and secret in the syncing.json file
         delete target.google_client_id;
         delete target.google_client_secret;
 
@@ -417,19 +417,19 @@ export class Syncing
         {
             // Get all files in the Google Drive folder
             const fileMap = await googleDrive.getAllFileIds();
-            console.log("Ripristino impostazioni dalla data:", date);
+            console.log("Restoring settings from date:", date);
 
-            // Verifica che la data selezionata sia valida
+            // Check that the selected date is valid
             let selectedDate: Date;
             try
             {
                 selectedDate = this._parseLocalizedDate(date);
-                console.log("Data convertita:", selectedDate.toISOString());
+                console.log("Converted date:", selectedDate.toISOString());
             }
             catch (dateError)
             {
-                console.error("Errore nella conversione della data:", dateError);
-                throw new Error("Impossibile elaborare la data selezionata");
+                console.error("Error converting date:", dateError);
+                throw new Error("Unable to process the selected date");
             }
 
             // For each file, find the revision closest to the selected date
@@ -437,11 +437,11 @@ export class Syncing
             {
                 try
                 {
-                    console.log(`Elaborazione file: ${filename} (ID: ${fileId})`);
+                    console.log(`Processing file: ${filename} (ID: ${fileId})`);
 
                     // Get all revisions of the file
                     const revisions = await googleDrive.getFileRevisions(fileId);
-                    console.log(`Trovate ${revisions.length} revisioni per ${filename}`);
+                    console.log(`Found ${revisions.length} revisions for ${filename}`);
 
                     if (revisions.length === 0)
                     {
@@ -457,43 +457,43 @@ export class Syncing
                         {
                             if (!revision.modifiedTime)
                             {
-                                console.log("Revisione senza modifiedTime, saltata");
+                                console.log("Revision without modifiedTime, skipped");
                                 continue;
                             }
 
                             const revisionDate = this._parseLocalizedDate(revision.modifiedTime);
-                            console.log(`Confronto data revisione: ${revisionDate.toLocaleDateString()} con selezionata: ${selectedDate.toLocaleDateString()}`);
+                            console.log(`Comparing revision date: ${revisionDate.toLocaleDateString()} with selected: ${selectedDate.toLocaleDateString()}`);
 
                             // Check if this revision's date matches the selected date (just the date part)
                             if (revisionDate.toLocaleDateString() === selectedDate.toLocaleDateString())
                             {
-                                console.log("Data corrispondente trovata");
+                                console.log("Matching date found");
 
                                 if (!closestRevision ||
                                     this._parseLocalizedDate(revision.modifiedTime).getTime() >
                                     this._parseLocalizedDate(closestRevision.modifiedTime).getTime())
                                 {
                                     closestRevision = revision;
-                                    console.log("Aggiornata revisione più recente");
+                                    console.log("Updated most recent revision");
                                 }
                             }
                         }
                         catch (revError)
                         {
-                            console.error("Errore nell'elaborazione della revisione:", revError);
+                            console.error("Error processing revision:", revError);
                         }
                     }
 
                     // If we found a revision for this date, restore it
                     if (closestRevision)
                     {
-                        console.log(`Ripristino revisione ${closestRevision.id} per il file ${filename}`);
+                        console.log(`Restoring revision ${closestRevision.id} for file ${filename}`);
                         await this.restoreFileRevision(fileId, closestRevision.id, filename);
                         restoredFiles.push(filename);
                     }
                     else
                     {
-                        console.log(`Nessuna revisione trovata per la data selezionata per il file ${filename}`);
+                        console.log(`No revision found for the selected date for file ${filename}`);
                     }
                 }
                 catch (fileError)
@@ -522,51 +522,51 @@ export class Syncing
      */
     private _parseLocalizedDate(dateStr: string): Date
     {
-        // Verifica se la data è nel formato italiano (GG/MM/AAAA, HH:MM:SS)
+        // Check if the date is in Italian format (DD/MM/YYYY, HH:MM:SS)
         const italianDateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
         const match = dateStr.match(italianDateRegex);
 
         if (match)
         {
-            // Estrai i componenti della data dal match
+            // Extract date components from the match
             const day = parseInt(match[1], 10);
-            const month = parseInt(match[2], 10) - 1; // Mesi in JS sono 0-indexed
+            const month = parseInt(match[2], 10) - 1; // Months in JS are 0-indexed
             const year = parseInt(match[3], 10);
             const hour = parseInt(match[4], 10);
             const minute = parseInt(match[5], 10);
             const second = parseInt(match[6], 10);
 
-            // Crea una data valida usando i componenti numerici
+            // Create a valid date using the numeric components
             const date = new Date(year, month, day, hour, minute, second);
-            console.log(`Data convertita da ${dateStr} a ${date.toISOString()}`);
+            console.log(`Date converted from ${dateStr} to ${date.toISOString()}`);
             return date;
         }
 
-        // Verifica anche il formato italiano senza orario
+        // Also check Italian format without time
         const simpleDateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
         const simpleMatch = dateStr.match(simpleDateRegex);
 
         if (simpleMatch)
         {
-            // Estrai i componenti della data dal match semplice
+            // Extract date components from the simple match
             const day = parseInt(simpleMatch[1], 10);
-            const month = parseInt(simpleMatch[2], 10) - 1; // Mesi in JS sono 0-indexed
+            const month = parseInt(simpleMatch[2], 10) - 1; // Months in JS are 0-indexed
             const year = parseInt(simpleMatch[3], 10);
 
-            // Crea una data valida usando i componenti numerici
+            // Create a valid date using the numeric components
             const date = new Date(year, month, day);
-            console.log(`Data semplice convertita da ${dateStr} a ${date.toISOString()}`);
+            console.log(`Simple date converted from ${dateStr} to ${date.toISOString()}`);
             return date;
         }
 
-        // Se non è nel formato italiano, prova il parser standard di JS
+        // If not in Italian format, try the standard JS parser
         const date = new Date(dateStr);
 
-        // Verifica che la data sia valida
+        // Verify that the date is valid
         if (isNaN(date.getTime()))
         {
-            console.error(`Impossibile analizzare la data: ${dateStr}`);
-            // Ritorna la data corrente come fallback
+            console.error(`Unable to parse date: ${dateStr}`);
+            // Return current date as fallback
             return new Date();
         }
 

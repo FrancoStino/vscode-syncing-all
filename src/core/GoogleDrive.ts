@@ -10,7 +10,7 @@ import { localize } from "../i18n";
 import { SettingType } from "../types";
 import { createError } from "../utils/errors";
 import { OAUTH_SERVER_PORT } from "../constants";
-import type { IGist as IRemoteStorage, IGistFiles as IRemoteFiles, ISetting } from "../types";
+import type { IGoogleDrive as IRemoteStorage, IGoogleDriveFiles as IRemoteFiles, ISetting } from "../types";
 
 /**
  * Google Drive utils.

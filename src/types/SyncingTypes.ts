@@ -54,7 +54,6 @@ export interface ISyncingSettings
  */
 export enum StorageProvider
 {
-    GitHubGist = "github_gist",
     GoogleDrive = "google_drive"
 }
 
