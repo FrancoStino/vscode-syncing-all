@@ -104,5 +104,8 @@
     "button.yes": "Yes",
     "button.no": "No",
     "button.copy.url": "Copy URL",
-    "toast.google.folder.selected": "Google Drive folder selected successfully."
+    "toast.google.folder.selected": "Google Drive folder selected successfully.",
+    "configuration.syncing.autoSync.enabled": "Enable automatic synchronization at regular intervals",
+    "configuration.syncing.autoSync.interval": "Interval between automatic synchronizations",
+    "configuration.syncing.autoSync.unit": "Time unit for automatic synchronization interval"
 }

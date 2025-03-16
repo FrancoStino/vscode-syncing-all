@@ -77,5 +77,8 @@
     "toast.google.auth.token.expired": "Google Drive 令牌已过期。正在重新授权...",
     "toast.google.auth.failed": "Google Drive 验证失败: {0}",
     "toast.google.auth.continue.sync": "正在继续同步...",
-    "toast.google.folder.selected": "Google Drive 文件夹选择成功。"
+    "toast.google.folder.selected": "Google Drive 文件夹选择成功。",
+    "configuration.syncing.autoSync.enabled": "启用定期自动同步",
+    "configuration.syncing.autoSync.interval": "自动同步的时间间隔",
+    "configuration.syncing.autoSync.unit": "自动同步时间间隔的单位"
 }

@@ -99,6 +99,23 @@
                         "type": "string",
                         "default": "",
                         "description": "Internal use: OAuth state for CSRF protection"
+                    },
+                    "syncing.autoSync.enabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Enable automatic synchronization at regular intervals"
+                    },
+                    "syncing.autoSync.interval": {
+                        "type": "number",
+                        "default": 30,
+                        "minimum": 1,
+                        "description": "Interval in minutes between automatic synchronizations"
+                    },
+                    "syncing.autoSync.unit": {
+                        "type": "string",
+                        "enum": ["minutes", "hours"],
+                        "default": "minutes",
+                        "description": "Time unit for automatic synchronization interval"
                     }
                 }
             }

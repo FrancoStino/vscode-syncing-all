@@ -16,6 +16,7 @@ let _isSynchronizing: boolean;
 
 export function activate(context: ExtensionContext)
 {
+    console.log("[DEBUG] Attivazione dell'estensione Syncing-All");
     _initCommands(context);
     _initSyncing(context);
     _initAutoSync();
@@ -54,6 +55,7 @@ export function activate(context: ExtensionContext)
 
 export function deactivate()
 {
+    console.log("[DEBUG] Disattivazione dell'estensione Syncing-All");
     _stopAutoSyncService();
 }
 
@@ -62,17 +64,20 @@ export function deactivate()
  */
 function _initCommands(context: ExtensionContext)
 {
+    console.log("[DEBUG] Inizializzazione dei comandi dell'estensione");
     // Register upload command.
     context.subscriptions.push(
         registerCommand(context, "syncing.uploadSettings", async () =>
         {
             if (!_isReady || _isSynchronizing)
             {
+                console.log(`[DEBUG] Upload non avviato: _isReady=${_isReady}, _isSynchronizing=${_isSynchronizing}`);
                 return;
             }
 
             try
             {
+                console.log("[DEBUG] Inizio dell'operazione di upload");
                 _isSynchronizing = true;
 
                 // Set the last requested operation
@@ -95,6 +100,7 @@ function _initCommands(context: ExtensionContext)
                 // Check storage provider and call appropriate upload method
                 if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
                 {
+                    console.log("[DEBUG] Utilizzo storage provider: Google Drive");
                     // Use Google Drive
                     if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret)
                     {
@@ -168,6 +174,9 @@ function _initCommands(context: ExtensionContext)
                         }
 
                         Toast.statusInfo(localize("toast.settings.uploaded"));
+
+                        // Aggiorna il timestamp dell'ultimo upload manuale
+                        _autoSyncService.updateLastUploadTime();
                     }
                     catch (err)
                     {
@@ -213,6 +222,7 @@ function _initCommands(context: ExtensionContext)
                 }
                 else
                 {
+                    console.log("[DEBUG] Utilizzo storage provider: GitHub Gist");
                     // Fallback to Remote Storage
                     const remoteStorageSettings = await _syncing.prepareUploadSettings(true);
                     const remoteStorage = _syncing.getRemoteStorageClient();
@@ -249,14 +259,20 @@ function _initCommands(context: ExtensionContext)
 
                     Toast.statusInfo(localize("toast.settings.uploaded"));
                 }
+
+                // Aggiorna il timestamp dell'ultimo upload manuale
+                console.log("[DEBUG] Aggiornamento del timestamp dell'ultimo upload");
+                _autoSyncService.updateLastUploadTime();
             }
             catch (err: any)
             {
+                console.log("[DEBUG] Errore durante l'upload:", err);
                 console.error("Syncing:", err);
                 Toast.statusError(err.message);
             }
             finally
             {
+                console.log("[DEBUG] Fine dell'operazione di upload, reset di _isSynchronizing");
                 _isSynchronizing = false;
             }
         })
@@ -441,6 +457,7 @@ function _initCommands(context: ExtensionContext)
  */
 function _initSyncing(context: ExtensionContext)
 {
+    console.log("[DEBUG] Inizializzazione del modulo Syncing");
     _isReady = false;
     _isSynchronizing = false;
 
@@ -456,15 +473,30 @@ function _initSyncing(context: ExtensionContext)
     {
         const settings = _syncing.loadSettings();
         _isReady = true;
+        console.log("[DEBUG] Impostazioni inizializzate con successo, _isReady=true");
         Toast.statusInfo(localize("toast.settings.initialized"));
 
-        if (settings.auto_sync)
+        console.log("[DEBUG] Controllo configurazioni di auto-sync:");
+        console.log("[DEBUG] - settings.auto_sync:", settings.auto_sync);
+
+        // Controlla se l'utente ha abilitato autoSync nelle impostazioni
+        const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+        console.log("[DEBUG] - autoSync.enabled:", autoSyncEnabled);
+
+        // Se auto_sync è abilitato nelle impostazioni di Syncing o autoSync.enabled è abilitato
+        if (settings.auto_sync || autoSyncEnabled)
         {
+            console.log("[DEBUG] Auto-sync abilitato nelle impostazioni, avvio del servizio auto-sync");
             // Resume auto sync service if auto sync is enabled.
             _resumeAutoSyncService();
         }
+        else
+        {
+            console.log("[DEBUG] Auto-sync non abilitato nelle impostazioni");
+        }
     }).catch((err: Error) =>
     {
+        console.log("[DEBUG] Errore durante l'inizializzazione delle impostazioni:", err);
         console.error(err);
         Toast.statusError(localize("toast.init.failed"));
     });
@@ -475,15 +507,64 @@ function _initSyncing(context: ExtensionContext)
  */
 function _initAutoSync()
 {
+    console.log("[DEBUG] Inizializzazione del servizio AutoSync");
     _autoSyncService = AutoSyncService.create();
+
+    console.log("[DEBUG] Registrazione eventi per upload/download");
     _autoSyncService.on("upload_settings", () =>
     {
+        console.log("[DEBUG] Evento upload_settings emesso - avvio upload automatico");
+        // Verifica se ci sono operazioni in corso prima di eseguire
+        if (_isSynchronizing)
+        {
+            console.log("[DEBUG] Impossibile eseguire upload - sincronizzazione già in corso");
+            return;
+        }
+
+        // Controlla se l'estensione è pronta
+        if (!_isReady)
+        {
+            console.log("[DEBUG] Impossibile eseguire upload - estensione non pronta");
+            return;
+        }
+
+        console.log("[DEBUG] Esecuzione comando uploadSettings");
         vscode.commands.executeCommand("syncing.uploadSettings");
     });
     _autoSyncService.on("download_settings", () =>
     {
+        console.log("[DEBUG] Evento download_settings emesso");
+        if (_isSynchronizing || !_isReady)
+        {
+            console.log("[DEBUG] Impossibile eseguire download - sincronizzazione in corso o estensione non pronta");
+            return;
+        }
         vscode.commands.executeCommand("syncing.downloadSettings");
     });
+
+    // Avvia il servizio di auto-sincronizzazione
+    console.log("[DEBUG] Avvio del servizio AutoSync");
+    _autoSyncService.start();
+
+    // Aggiungi un controllo periodico dello stato
+    setInterval(() =>
+    {
+        console.log("[DEBUG] Controllo periodico stato autosync:");
+        console.log("[DEBUG] - _isReady:", _isReady);
+        console.log("[DEBUG] - _isSynchronizing:", _isSynchronizing);
+        console.log("[DEBUG] - autoSyncService.isRunning():", _autoSyncService.isRunning());
+
+        // Verifica se l'autoSync è abilitato
+        const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+        console.log("[DEBUG] - autoSyncEnabled:", autoSyncEnabled);
+
+        // Se autoSync è abilitato ma il servizio non è in esecuzione, avviarlo
+        if (autoSyncEnabled && _isReady && !_isSynchronizing && !_autoSyncService.isRunning())
+        {
+            console.log("[DEBUG] Riavvio automatico del servizio AutoSync");
+            _autoSyncService.start();
+        }
+    }, 30000); // Controlla ogni 30 secondi
 }
 
 /**
@@ -491,12 +572,59 @@ function _initAutoSync()
  */
 function _resumeAutoSyncService()
 {
-    if (!_isSynchronizing)
+    console.log("[DEBUG] Tentativo di ripresa del servizio auto-sync");
+
+    // Verifica se il servizio è già stato inizializzato
+    if (!_autoSyncService)
     {
-        if (_isReady && _autoSyncService && !_autoSyncService.isRunning())
+        console.log("[DEBUG] AutoSyncService non ancora inizializzato, avvio inizializzazione");
+        _initAutoSync();
+        return;
+    }
+
+    // Controlla se è in corso una sincronizzazione
+    if (_isSynchronizing)
+    {
+        console.log("[DEBUG] Impossibile riprendere auto-sync: sincronizzazione in corso (_isSynchronizing=true)");
+        // Ritenta tra 5 secondi
+        setTimeout(_resumeAutoSyncService, 5000);
+        return;
+    }
+
+    // Controlla se l'estensione è pronta
+    if (!_isReady)
+    {
+        console.log("[DEBUG] Estensione non pronta, ritardo avvio auto-sync");
+        // Ritenta tra 3 secondi
+        setTimeout(_resumeAutoSyncService, 3000);
+        return;
+    }
+
+    // Il servizio è inizializzato e non c'è sincronizzazione in corso
+    if (_autoSyncService && !_autoSyncService.isRunning())
+    {
+        console.log("[DEBUG] Ripresa del servizio auto-sync");
+        _autoSyncService.start();
+
+        // Verifica che il servizio sia stato avviato correttamente
+        setTimeout(() =>
         {
-            _autoSyncService.start();
-        }
+            console.log("[DEBUG] Verifica avvio auto-sync:");
+            console.log("[DEBUG] - autoSyncService.isRunning():", _autoSyncService.isRunning());
+
+            // Se ancora non è in esecuzione, riprova
+            if (!_autoSyncService.isRunning())
+            {
+                console.log("[DEBUG] Auto-sync non avviato correttamente, nuovo tentativo");
+                _autoSyncService.start();
+            }
+        }, 1000);
+    }
+    else
+    {
+        console.log(`[DEBUG] Impossibile riprendere il servizio auto-sync: _isReady=${_isReady
+        }, _autoSyncService=${!!_autoSyncService
+        }, isRunning=${_autoSyncService ? _autoSyncService.isRunning() : false}`);
     }
 }
 
@@ -505,9 +633,15 @@ function _resumeAutoSyncService()
  */
 function _stopAutoSyncService()
 {
+    console.log("[DEBUG] Tentativo di arresto del servizio auto-sync");
     if (_autoSyncService && _autoSyncService.isRunning())
     {
+        console.log("[DEBUG] Arresto del servizio auto-sync");
         _autoSyncService.stop();
+    }
+    else
+    {
+        console.log("[DEBUG] Servizio auto-sync non in esecuzione o non inizializzato");
     }
 }
 
