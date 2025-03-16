@@ -16,7 +16,8 @@ import type {
     StorageUpdateParam
 } from "./RemoteStorageTypes";
 
-// These type aliases ensure backward compatibility with existing code
+// Type aliases for backward compatibility with existing code that referred to Gist
+// Now they refer to Google Drive storage
 export type IGist = IRemoteStorage;
 export type IGistFiles = IRemoteFiles;
 export type IGistFile = IRemoteFile;

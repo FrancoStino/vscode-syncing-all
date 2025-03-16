@@ -9,7 +9,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-**Syncing** *([源码](https://github.com/nonoroazoro/vscode-syncing))* 是一个 VSCode 扩展，它能在**多台设备之间同步您的所有 VSCode 配置**（借助了 [GitHub Gist](https://gist.github.com)）。
+**Syncing** *([源码](https://github.com/nonoroazoro/vscode-syncing))* 是一个 VSCode 扩展，它能在**多台设备之间同步您的所有 VSCode 配置**（借助了 [Google Drive](https://drive.google.com)）。
 
 [点击这里](#快速开始)快速开始配置吧，当然您也可以先看看[示例](#示例)哦。
 
@@ -24,7 +24,7 @@
 
     * 包括您的`用户设置`，`快捷键`，`扩展`，`语言设置`以及所有`代码片段（Snippets）`；
     * 因为 `Mac` 和`非 Mac` 设备的配置通常会有一些差异，所以`快捷键`将会按照操作系统的不同分别上传；
-    * 自动帮您创建新的 `Gist` 来保存 VSCode 配置，例如当您第一次使用这个扩展上传配置时；
+    * 自动帮您创建新的 `Google Drive 文件夹` 来保存 VSCode 配置，例如当您第一次使用这个扩展上传配置时；
     * 为了加快同步速度，整个同步过程都是`增量`的；
     * 您可以`排除某些 VSCode 配置项和扩展`，以防它们被上传，具体请参考[这里](#vscode-配置项)。
 
@@ -32,10 +32,10 @@
 
     * 请注意，下载配置时会**覆盖**您的本地配置（以云端为准，精确同步）；
     * 自动帮您`安装`、`升级`和`删除`扩展；
-    * 您可以从一个`公开的 Gist` 中下载配置。例如，下载您朋友分享的配置，只要问他要一个 `Gist ID` 就行了，具体请参考[这里](#快速开始)；
+    * 您可以从一个`共享的 Google Drive 文件夹` 中下载配置。例如，下载您朋友分享的配置，只要问他要一个 `文件夹 ID` 就行了，具体请参考[这里](#快速开始)；
     * 您可以`排除某些 VSCode 配置项和扩展`，以防它们被下载，具体请参考[这里](#vscode-配置项)。
 
-另外，如果您访问 GitHub 有困难（万恶的墙），您可以[配置一个代理](#代理设置)来加速同步。当然，您也可以开启[自动同步](#配置自动同步)来进一步简化同步过程！
+另外，如果您访问 Google Drive 有困难（万恶的墙），您可以[配置一个代理](#代理设置)来加速同步。当然，您也可以开启[自动同步](#配置自动同步)来进一步简化同步过程！
 
 
 ## 命令
@@ -44,15 +44,15 @@
 
 1. ***`Syncing: Upload Settings`***
 
-    > 上传配置到 GitHub Gist。
+    > 上传配置到 Google Drive。
 
 1. ***`Syncing: Download Settings`***
 
-    > 从 GitHub Gist 下载配置。
+    > 从 Google Drive 下载配置。
 
 1. ***`Syncing: Open Syncing Settings`***
 
-    > 设置 `GitHub Personal Access Token`、`Gist ID` 或`代理`。
+    > 设置 `Google Drive 凭据`、`文件夹 ID` 或`代理`。
 
 
 ## 快捷键
@@ -152,7 +152,7 @@
 
 ## 代理设置
 
-如果您访问 GitHub 有困难，比如在国内有万恶的墙，您可以配置一个代理来加速同步，具体步骤如下：
+如果您访问 Google Drive 有困难，比如在国内有万恶的墙，您可以配置一个代理来加速同步，具体步骤如下：
 
 1. 在 `VSCode 的命令面板`中输入 `Syncing: Open Syncing Settings`（或者 `opensync`）来打开 `Syncing` 自己的配置文件（即 `syncing.json` 文件）；
 
@@ -184,23 +184,21 @@ Syncing 现在支持配置自动同步了，具体步骤如下：
 
 ## 快速开始
 
-1. 创建您自己的 `GitHub Personal Access Token`（总共 3 步）：
+1. 创建您自己的 `Google Drive 凭据`（总共 3 步）：
 
-    1. 登录到您的 **[GitHub Personal Access Tokens 页面](https://github.com/settings/tokens)**，点击 **`Generate new token`**；
+    1. 登录到您的 **[Google Drive 授权页面](https://drive.google.com)**，点击 **`授权`**；
 
-        ![generate new token](docs/png/Generate-New-Token.png)
+        ![authorize](docs/png/Authorize.png)
 
-    1. 指定一个 **`name`**，然后勾选 **`gist`**，最后点击 **`Generate token`**；
+    1. 指定一个容易辨识的名称，并授权应用程序使用 Google Drive；
 
-        ![allow gist](docs/png/Allow-Gist.png)
+    1. 点击 **`授权`** 并且 **`备份`** 您的授权信息。
 
-    1. 点击 **`Copy`** 并且 **`备份`** 您的 Token。
-
-        ![copy and backup token](docs/png/Copy-Token.png)
+        ![authorize and backup](docs/png/Authorize-Backup.png)
 
 1. 同步您的 VSCode 配置：
 
-    在第一次使用时，`Syncing` 会向您询问一些必要的信息并保存下来以供后续使用，主要就是前面申请的 `GitHub Personal Access Token` 啦。
+    在第一次使用时，`Syncing` 会向您询问一些必要的信息并保存下来以供后续使用，主要就是前面申请的 `Google Drive 凭据` 啦。
 
     1. **上传配置**
 
@@ -208,15 +206,15 @@ Syncing 现在支持配置自动同步了，具体步骤如下：
 
             ![upload settings](docs/png/Upload-Settings.png)
 
-        1. 填写刚才申请的 `GitHub Personal Access Token`；
+        1. 填写刚才申请的 `Google Drive 凭据`；
 
-        1. 在下拉框中选择或者手动输入一个 `Gist ID`；
+        1. 在下拉框中选择或者手动输入一个 `文件夹 ID`；
 
-            > 您可以留空，那样的话 `Syncing` 会自动帮您创建一个新的 `Gist`。
+            > 您可以留空，那样的话 `Syncing` 会自动帮您创建一个新的 `文件夹`。
 
         1. 完成！
 
-        1. *在上传完成后，您可以在 [GitHub Gist](https://gist.github.com) 中找到对应的 `Gist` 和 `Gist ID`。当然您也可以通过 `Edit` 和 `make it public` 操作将您的配置共享给其他人。*
+        1. *在上传完成后，您可以在 [Google Drive](https://drive.google.com) 中找到对应的 `文件夹` 和 `ID`。当然您也可以通过共享该文件夹，将您的配置分享给其他人。*
 
     1. **下载配置**
 
@@ -224,11 +222,11 @@ Syncing 现在支持配置自动同步了，具体步骤如下：
 
             ![download settings](docs/png/Download-Settings.png)
 
-        1. 填写您的 `GitHub Personal Access Token`；
+        1. 填写您的 `Google Drive 凭据`；
 
-            > 您可以留空，那样的话就能从一个`公开的 Gist`（比如您朋友共享给您的 `Gist`）来下载配置了。
+            > 您可以留空，那样的话就能从一个`共享的文件夹`（比如您朋友共享给您的文件夹）来下载配置了。
 
-        1. 在下拉框中选择或者手动输入一个 `Gist ID`（当然这里也可以输入一个`公开的 Gist ID`）。
+        1. 在下拉框中选择或者手动输入一个 `文件夹 ID`（当然这里也可以输入一个`共享的文件夹 ID`）。
 
         1. 完成！
 

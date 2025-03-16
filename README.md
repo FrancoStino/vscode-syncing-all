@@ -5,7 +5,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-**Syncing** *([View Source Code](https://github.com/nonoroazoro/vscode-syncing))* is a VSCode extension, designed to **synchronize all of your VSCode settings across multiple devices** with your [GitHub Gist](https://gist.github.com).
+**Syncing** *([View Source Code](https://github.com/nonoroazoro/vscode-syncing))* is a VSCode extension, designed to **synchronize all of your VSCode settings across multiple devices** with your [Google Drive](https://drive.google.com).
 
 [Getting started](#getting-started) or [check out the examples](#examples).
 
@@ -20,7 +20,7 @@
 
     * Including your `User Settings`, `Keybindings`, `Extensions`, `Locales` and `Snippets`.
     * The `keybindings` of `MacOS` and `non-MacOS` will be synchronized separately, in case you have multiple devices of different operating systems.
-    * Automatically create a new Gist to store your settings.
+    * Automatically create a new folder in Google Drive to store your settings.
     * Use an incremental algorithm to boost the synchronization.
     * You can `exclude some VSCode User Settings and Extensions` from being uploaded, [check out the VSCode User Settings](#vscode-user-settings) for more details.
 
@@ -28,7 +28,7 @@
 
     * **Always overwrite** local settings.
     * Automatically `install, update` and `remove` extensions.
-    * You can download settings from `a public Gist`, such as your friend's VSCode settings, [check out here](#getting-started) for more details.
+    * You can download settings from `a shared Google Drive folder`, such as your friend's VSCode settings, [check out here](#getting-started) for more details.
     * You can `exclude some VSCode User Settings and Extensions` from being downloaded, [check out the VSCode User Settings](#vscode-user-settings) for more details.
 
 Besides, you can [set up a proxy](#proxy-settings) to accelerate the synchronization. And of course, you can turn on the [auto-sync](#auto-sync-settings) to simplify the synchronization :).
@@ -40,15 +40,15 @@ You can type `"upload"`, `"download"` (or `"syncing"`) in `VSCode Command Palett
 
 1. ***`Syncing: Upload Settings`***
 
-    > Upload settings to GitHub Gist.
+    > Upload settings to Google Drive.
 
 1. ***`Syncing: Download Settings`***
 
-    > Download settings from GitHub Gist.
+    > Download settings from Google Drive.
 
 1. ***`Syncing: Open Syncing Settings`***
 
-    > Set your `GitHub Personal Access Token`, `Gist ID` or `HTTP Proxy` settings.
+    > Set your `Google Drive Credentials`, `Folder ID` or `HTTP Proxy` settings.
 
 
 ## Keybindings
@@ -182,9 +182,9 @@ You can now let Syncing auto-sync your settings. Here are the steps:
 
 Syncing supports multiple storage providers for synchronizing your VSCode settings:
 
-### GitHub Gist
+### Google Drive
 
-This is the default storage provider, which synchronizes your settings using GitHub Gist.
+This is the default storage provider, which synchronizes your settings using Google Drive.
 
 ### Google Drive
 
@@ -212,17 +212,15 @@ To obtain a refresh token, you'll need to:
 
 ## Getting Started
 
-1. Get your own `GitHub Personal Access Token` (3 steps).
+1. Get your own `Google Drive Credentials` (3 steps).
 
-    1. Login to your **[GitHub Personal Access Tokens page](https://github.com/settings/tokens)** and click **`Generate new token`**.
+    1. Give your account appropriate permissions, and authorize the app to use Google Drive.
 
-        ![generate new token](docs/png/Generate-New-Token.png)
+    1. Select or enter your `Folder ID`.
 
-    1. Give your token a descriptive **`name`**, check **`gist`** and click **`Generate token`**.
+        > You can `leave it blank` to create a new `Folder` automatically.
 
-        ![allow gist](docs/png/Allow-Gist.png)
-
-    1. **`Copy`** and **`backup`** your token.
+    1. **`Copy`** and **`backup`** your credentials.
 
         ![copy and backup token](docs/png/Copy-Token.png)
 
@@ -236,15 +234,15 @@ To obtain a refresh token, you'll need to:
 
             ![upload settings](docs/png/Upload-Settings.png)
 
-        1. Enter your `GitHub Personal Access Token`.
+        1. Enter your `Google Drive Credentials`.
 
-        1. Select or enter your `Gist ID`.
+        1. Select or enter your `Folder ID`.
 
-            > You can `leave it blank` to create a new `Gist` automatically.
+            > You can `leave it blank` to create a new `Folder` automatically.
 
         1. Done!
 
-        1. *After it's done, you can find the settings and the corresponding `Gist ID` in your [GitHub Gist](https://gist.github.com). Also, you can `Edit` and `make it public` to share your settings with others.*
+        1. *After it's done, you can find the settings and the corresponding `Folder ID` in your [Google Drive](https://drive.google.com). Also, you can `share the folder` to share your settings with others.*
 
     1. **Download**
 
@@ -252,11 +250,11 @@ To obtain a refresh token, you'll need to:
 
             ![download settings](docs/png/Download-Settings.png)
 
-        1. Enter your `GitHub Personal Access Token`.
+        1. Enter your `Google Drive Credentials`.
 
-            > You can `leave it blank` if you want to download from a `public Gist`, such as your friend's VSCode settings.
+            > You can `leave it blank` if you want to download from a `shared folder`, such as your friend's VSCode settings.
 
-        1. Select or enter your `Gist ID` or a `public Gist ID`.
+        1. Select or enter your `Folder ID` or a `shared Folder ID`.
 
         1. Done!
 
