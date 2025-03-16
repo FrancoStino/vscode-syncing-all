@@ -19,6 +19,37 @@ export function activate(context: ExtensionContext)
     _initCommands(context);
     _initSyncing(context);
     _initAutoSync();
+
+    // Aggiungi un comando per resettare lo stato di sincronizzazione (utile in caso di problemi)
+    context.subscriptions.push(
+        registerCommand(context, "syncing.resetSyncState", () =>
+        {
+            _isSynchronizing = false;
+            vscode.window.showInformationMessage("Stato di sincronizzazione resettato. Puoi ora riprovare l'operazione.");
+        })
+    );
+
+    // L'URI handler rimane per compatibilità, ma non tenta più di riprendere l'operazione
+    context.subscriptions.push(
+        vscode.window.registerUriHandler({
+            handleUri(uri: vscode.Uri): void
+            {
+                console.log("URI handler called with:", uri.toString());
+
+                // Extract the path part from URI - works with both cursor:// and vscode://
+                const path = uri.path;
+
+                // If we're in the middle of OAuth flow (from the oauth2callback path)
+                if (path === "/oauth2callback")
+                {
+                    console.log("OAuth callback received - but no action taken, using direct approach instead");
+
+                    // Resetta il flag di sincronizzazione per sicurezza
+                    _isSynchronizing = false;
+                }
+            }
+        })
+    );
 }
 
 export function deactivate()
@@ -88,7 +119,8 @@ function _initCommands(context: ExtensionContext)
                             Toast.statusInfo(localize("toast.google.auth.success"));
                         }
 
-                        // The auth flow will continue via the URI handler
+                        // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                        // dell'operazione dal metodo authenticate() di GoogleDrive
                         _isSynchronizing = false;
                         return;
                     }
@@ -149,18 +181,30 @@ function _initCommands(context: ExtensionContext)
                             // Mostra messaggio all'utente
                             Toast.statusInfo(localize("toast.google.auth.token.expired"));
 
-                            // Riavvia l'autenticazione
-                            const refreshGoogleDrive = _syncing.getGoogleDriveClient();
-                            await refreshGoogleDrive.authenticate();
-
-                            // Salva il nuovo token
-                            if (refreshGoogleDrive.refreshToken)
+                            try
                             {
-                                syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
-                                await _syncing.saveSettings(syncingSettings);
-                                Toast.statusInfo(localize("toast.google.auth.success"));
+                                // Riavvia l'autenticazione
+                                const refreshGoogleDrive = _syncing.getGoogleDriveClient();
+                                await refreshGoogleDrive.authenticate();
+
+                                // Salva il nuovo token
+                                if (refreshGoogleDrive.refreshToken)
+                                {
+                                    syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
+                                    await _syncing.saveSettings(syncingSettings);
+                                    Toast.statusInfo(localize("toast.google.auth.success"));
+
+                                    // La ripresa automatica dell'operazione viene gestita da GoogleDrive.authenticate()
+                                }
+                            }
+                            catch (authErr)
+                            {
+                                console.error("Authentication error:", authErr);
+                                Toast.statusError(localize("toast.google.auth.failed", authErr.message));
                             }
 
+                            // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                            // dell'operazione dal metodo authenticate() di GoogleDrive
                             _isSynchronizing = false;
                             return;
                         }
@@ -260,7 +304,8 @@ function _initCommands(context: ExtensionContext)
                             Toast.statusInfo(localize("toast.google.auth.success"));
                         }
 
-                        // The auth flow will continue via the URI handler
+                        // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                        // dell'operazione dal metodo authenticate() di GoogleDrive
                         _isSynchronizing = false;
                         return;
                     }
@@ -319,18 +364,30 @@ function _initCommands(context: ExtensionContext)
                             // Mostra messaggio all'utente
                             Toast.statusInfo(localize("toast.google.auth.token.expired"));
 
-                            // Riavvia l'autenticazione
-                            const refreshGoogleDrive = _syncing.getGoogleDriveClient();
-                            await refreshGoogleDrive.authenticate();
-
-                            // Salva il nuovo token
-                            if (refreshGoogleDrive.refreshToken)
+                            try
                             {
-                                syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
-                                await _syncing.saveSettings(syncingSettings);
-                                Toast.statusInfo(localize("toast.google.auth.success"));
+                                // Riavvia l'autenticazione
+                                const refreshGoogleDrive = _syncing.getGoogleDriveClient();
+                                await refreshGoogleDrive.authenticate();
+
+                                // Salva il nuovo token
+                                if (refreshGoogleDrive.refreshToken)
+                                {
+                                    syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
+                                    await _syncing.saveSettings(syncingSettings);
+                                    Toast.statusInfo(localize("toast.google.auth.success"));
+
+                                    // La ripresa automatica dell'operazione viene gestita da GoogleDrive.authenticate()
+                                }
+                            }
+                            catch (authErr)
+                            {
+                                console.error("Authentication error:", authErr);
+                                Toast.statusError(localize("toast.google.auth.failed", authErr.message));
                             }
 
+                            // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                            // dell'operazione dal metodo authenticate() di GoogleDrive
                             _isSynchronizing = false;
                             return;
                         }

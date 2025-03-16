@@ -70,5 +70,12 @@
     "pokaYoke.continue.upload.message": "即将上传的配置与云端配置之间存在较大差异，确定要继续上传并覆盖云端配置吗?",
     "error.github.oauth.failed": "GitHub OAuth 认证失败: {0}",
     "toast.settings.show.reload.message": "设置已成功同步。您想要重启 Cursor 以应用更改吗？",
-    "toast.settings.show.reload.button.text": "立即重启"
+    "toast.settings.show.reload.button.text": "立即重启",
+    "toast.google.auth.browser.opened": "已打开浏览器进行 Google 授权。请按照说明进行操作。",
+    "toast.google.auth.success": "Google Drive 验证成功。",
+    "toast.google.auth.wait": "请在浏览器中完成验证。",
+    "toast.google.auth.token.expired": "Google Drive 令牌已过期。正在重新授权...",
+    "toast.google.auth.failed": "Google Drive 验证失败: {0}",
+    "toast.google.auth.continue.sync": "正在继续同步...",
+    "toast.google.folder.selected": "Google Drive 文件夹选择成功。"
 }

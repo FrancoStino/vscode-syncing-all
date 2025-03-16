@@ -92,14 +92,15 @@
     "error.auth.timeout": "Authentication timed out. Please try again.",
     "error.syncing.not.ready": "Syncing is not ready yet. Please try again in a moment.",
     "toast.google.auth.processing": "Processing Google authentication...",
-    "toast.google.auth.success": "Autenticazione Google completata con successo",
-    "toast.google.auth.continue.sync": "Would you like to continue with the synchronization?",
-    "toast.google.auth.browser.opened": "A browser window has been opened for Google authentication. Please complete the authorization process.",
-    "toast.google.auth.wait": "Wait for Google authentication to complete in the browser.",
-    "toast.google.auth.token.expired": "Il token di Google è scaduto o non è valido. Riavvio autenticazione...",
+    "toast.google.auth.success": "Google Drive authentication successful.",
+    "toast.google.auth.continue.sync": "Continuing synchronization...",
+    "toast.google.auth.browser.opened": "The browser has been opened to authorize access to Google Drive. Please follow the instructions.",
+    "toast.google.auth.wait": "Please complete the authentication in your browser.",
+    "toast.google.auth.token.expired": "Google Drive token expired. Reauthorizing...",
+    "toast.google.auth.failed": "Google Drive authentication failed: {0}",
     "toast.url.copied": "URL copied to clipboard.",
     "button.yes": "Yes",
     "button.no": "No",
     "button.copy.url": "Copy URL",
-    "toast.google.folder.selected": "Cartella Google Drive selezionata con successo."
+    "toast.google.folder.selected": "Google Drive folder selected successfully."
 }

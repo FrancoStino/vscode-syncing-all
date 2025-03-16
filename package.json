@@ -54,6 +54,10 @@
             {
                 "command": "syncing.openSettings",
                 "title": "%commands.openSettings%"
+            },
+            {
+                "command": "syncing.resetSyncState",
+                "title": "Syncing: Reset Synchronization State"
             }
         ],
         "configuration": [

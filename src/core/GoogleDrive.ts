@@ -144,35 +144,73 @@ export class GoogleDrive
                 {
                     try
                     {
+                        // Log ogni richiesta ricevuta dal server
+                        console.log("Received request:", req.method, req.url);
+
                         // Torno a usare url.parse per compatibilità con Node.js 8.0.0
                         const reqUrl = req.url || "";
                         // eslint-disable-next-line node/no-deprecated-api
                         const parsedUrl = url.parse(reqUrl, true);
+                        console.log("Parsed URL:", parsedUrl.pathname, "Query:", JSON.stringify(parsedUrl.query));
 
                         if (parsedUrl.pathname === "/oauth2callback")
                         {
                             // Send a response to the browser
                             res.writeHead(200, { "Content-Type": "text/html" });
-                            res.end(`
+
+                            const htmlResponse = `
                                 <html>
-                                <head><title>Authentication completed</title></head>
+                                <head>
+                                    <title>Authentication completed</title>
+                                    <style>
+                                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                                        h1 { color: #4285f4; }
+                                        p { margin: 20px 0; }
+                                        .status { font-weight: bold; }
+                                        .instructions { background-color: #f1f1f1; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: left; }
+                                        .cmd { background-color: #e0e0e0; padding: 3px 6px; border-radius: 3px; font-family: monospace; }
+                                    </style>
+                                </head>
                                 <body>
                                     <h1>Authentication completed</h1>
-                                    <p>You can close this window and return to your IDE.</p>
-                                    <script>window.close();</script>
+                                    <p>L'autenticazione a Google Drive è stata completata con successo!</p>
+                                    
+                                    <div class="instructions">
+                                        <p><strong>Cosa succederà ora:</strong></p>
+                                        <ol>
+                                            <li>Torna a Cursor</li>
+                                            <li>L'operazione interrotta riprenderà automaticamente</li>
+                                            <li>Se l'operazione non riprende entro pochi secondi, puoi anche eseguire manualmente il comando di upload o download</li>
+                                        </ol>
+                                    </div>
+                                    
+                                    <p class="status">Status: <span id="status">Autenticazione completata con successo</span></p>
+                                    
+                                    <script>
+                                        // Questa pagina di callback è puramente informativa
+                                        setTimeout(() => {
+                                            document.getElementById('status').textContent = 
+                                                'Puoi chiudere questa finestra e tornare a Cursor';
+                                        }, 2000);
+                                    </script>
                                 </body>
                                 </html>
-                            `);
+                            `;
+
+                            res.end(htmlResponse);
+                            console.log("Sent HTML response to browser");
 
                             const code = parsedUrl.query.code;
                             if (code)
                             {
                                 // Got the auth code, resolve the promise
+                                console.log("Received auth code, resolving promise");
                                 resolve(code as string);
 
                                 // Close the server after a short delay to ensure the response is sent
                                 setTimeout(() =>
                                 {
+                                    console.log("Closing OAuth server");
                                     server.close();
                                 }, 1000);
                             }
@@ -180,9 +218,16 @@ export class GoogleDrive
                             {
                                 // Authentication failed
                                 const error = parsedUrl.query.error || "unknown";
+                                console.error("Authentication error:", error);
                                 reject(new Error(`Authorization failed: ${error}`));
                                 server.close();
                             }
+                        }
+                        else
+                        {
+                            // Handle other requests (like favicon.ico)
+                            res.writeHead(404);
+                            res.end();
                         }
                     }
                     catch (err)
@@ -212,40 +257,135 @@ export class GoogleDrive
             });
 
             // Open the URL in the browser
-            const success = await vscode.env.openExternal(vscode.Uri.parse(authUrl));
-
-            if (!success)
+            console.log("Attempting to open browser with URL:", authUrl);
+            try
             {
-                throw new Error(localize("error.browser.open"));
+                const success = await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+
+                if (!success)
+                {
+                    console.error("Failed to open browser automatically");
+                    throw new Error(localize("error.browser.open"));
+                }
+
+                console.log("Browser opened successfully");
+
+                // Show a message to the user
+                vscode.window.showInformationMessage(
+                    localize("toast.google.auth.browser.opened"),
+                    localize("button.copy.url")
+                ).then(selection =>
+                {
+                    if (selection === localize("button.copy.url"))
+                    {
+                        vscode.env.clipboard.writeText(authUrl);
+                        vscode.window.showInformationMessage(localize("toast.url.copied"));
+                    }
+                });
+            }
+            catch (openError)
+            {
+                console.error("Error opening browser:", openError);
+
+                // In caso di errore nell'apertura del browser, mostriamo un messaggio con opzione di copiare l'URL
+                const copyUrl = localize("button.copy.url");
+                const openBrowser = "Open URL manually";
+
+                vscode.window.showErrorMessage(
+                    `Failed to open browser automatically. Please open this URL manually: ${authUrl.substring(0, 50)}...`,
+                    copyUrl,
+                    openBrowser
+                ).then(selection =>
+                {
+                    if (selection === copyUrl)
+                    {
+                        vscode.env.clipboard.writeText(authUrl);
+                        vscode.window.showInformationMessage(localize("toast.url.copied"));
+                    }
+                    else if (selection === openBrowser)
+                    {
+                        vscode.env.openExternal(vscode.Uri.parse(authUrl));
+                    }
+                });
             }
 
-            // Show a message to the user
-            vscode.window.showInformationMessage(
-                localize("toast.google.auth.browser.opened"),
-                localize("button.copy.url")
-            ).then(selection =>
-            {
-                if (selection === localize("button.copy.url"))
-                {
-                    vscode.env.clipboard.writeText(authUrl);
-                    vscode.window.showInformationMessage(localize("toast.url.copied"));
-                }
-            });
-
             // Wait for the auth code
+            console.log("Waiting for auth code from callback...");
             const authCode = await authCodePromise;
 
             // Exchange the auth code for a refresh token
+            console.log("Received auth code, requesting refresh token...");
             const refreshToken = await this.getRefreshToken(authCode);
+            console.log("Refresh token successfully obtained");
 
             // Show success message
             vscode.window.showInformationMessage(localize("toast.google.auth.success"));
 
             // Update the instance's refresh token
             this._refreshToken = refreshToken;
+
+            // Salva il token e riprendi automaticamente l'operazione
+            try
+            {
+                // Importa l'oggetto Syncing per aggiornare le impostazioni
+                const { Syncing } = require("../core");
+                const syncing = Syncing.create();
+
+                // Carica le impostazioni attuali
+                const settings = syncing.loadSettings();
+
+                // Aggiorna il token di refresh
+                settings.google_refresh_token = refreshToken;
+
+                // Salva le impostazioni aggiornate
+                await syncing.saveSettings(settings);
+                console.log("Refresh token saved to settings");
+
+                // Controlla l'operazione precedente
+                const lastOperation = syncing.getLastRequestedOperation();
+                console.log("Last operation was:", lastOperation);
+
+                if (lastOperation)
+                {
+                    // Ottieni oggetti necessari per riprendere direttamente l'operazione
+
+                    // Visualizza un messaggio informativo
+                    vscode.window.showInformationMessage(
+                        localize("toast.google.auth.success")
+                    );
+
+                    // Invece di usare executeCommand, usa un timeout per garantire che il token
+                    // sia stato salvato e lo stato di _isSynchronizing sia stato resettato
+                    console.log("Setting timer to resume operation automatically");
+                    setTimeout(() =>
+                    {
+                        try
+                        {
+                            // Ripristina l'operazione in modo diretto
+                            vscode.commands.executeCommand(`syncing.${lastOperation}Settings`);
+                        }
+                        catch (cmdError)
+                        {
+                            console.error("Error executing command:", cmdError);
+
+                            // Mostra un messaggio che suggerisce di riprovare manualmente
+                            vscode.window.showInformationMessage(
+                                "L'operazione non è stata ripresa automaticamente. " +
+                                `Per favore esegui manualmente il comando Syncing: ${lastOperation === "upload" ? "Upload" : "Download"} Settings.`
+                            );
+                        }
+                    }, 1500); // Attendi 1.5 secondi per garantire che tutto sia pronto
+                }
+            }
+            catch (saveError)
+            {
+                console.error("Error saving refresh token:", saveError);
+                // Continuiamo comunque, l'utente dovrà autenticarsi di nuovo
+            }
         }
         catch (err: any)
         {
+            console.error("Authentication error:", err);
             throw this._createError(err);
         }
     }
@@ -263,12 +403,16 @@ export class GoogleDrive
 
         try
         {
+            console.log("Exchanging auth code for tokens...");
             const { tokens } = await this._auth.getToken(authCode);
+            console.log("Received tokens from Google:", Object.keys(tokens).join(", "));
+
             this._auth.setCredentials(tokens);
             this._refreshToken = tokens.refresh_token;
 
             if (!tokens.refresh_token)
             {
+                console.error("No refresh token in Google response");
                 throw createError(localize("error.no.refresh.token"), 401);
             }
 
@@ -276,6 +420,7 @@ export class GoogleDrive
         }
         catch (err: any)
         {
+            console.error("Error getting refresh token:", err);
             throw this._createError(err);
         }
     }
