@@ -21,6 +21,8 @@ export class AutoSyncService
     private _eventEmitter: EventEmitter;
     private _timeoutId: NodeJS.Timeout | null = null;
     private _lastUploadTime: number = Date.now();
+    private _watchdogId: NodeJS.Timeout | null = null;
+    private _autoRestartEnabled: boolean = true;
 
     private constructor()
     {
@@ -65,6 +67,9 @@ export class AutoSyncService
                 }, 1000);
             }
         });
+
+        // Avvia subito il watchdog per il monitoraggio continuo
+        this._startWatchdog();
     }
 
     /**
@@ -107,19 +112,45 @@ export class AutoSyncService
     {
         console.log("[DEBUG] AutoSyncService.start() - Avvio servizio auto-sync");
         this._running = true;
-        this._watcher.start();
 
-        // Assicura che il timer sia configurato correttamente
-        this._setupTimedUpload();
+        // Pulisci i timer esistenti prima di ripartire
+        this._clearTimers();
 
-        // Verifica che il timer sia stato configurato
-        setTimeout(() =>
+        // Resetta _lastUploadTime a un valore che consentirà l'upload quando necessario
+        // ma non forzerà un upload immediato all'avvio
+        this._lastUploadTime = Date.now();
+
+        // Attiva il watchdog per controllare che il servizio rimanga attivo
+        this._setupWatchdog();
+
+        // Configura il timer per gli upload periodici
+        this._setupForcedTimedUpload();
+
+        // All'avvio del servizio, verifica solo se ci sono impostazioni remote più recenti
+        setTimeout(async () =>
         {
-            console.log("[DEBUG] Verifica configurazione timer dopo start:");
-            console.log("[DEBUG] - running:", this._running);
-            console.log("[DEBUG] - timerActive:", this._timeoutId !== null);
-        }, 1000);
+            if (this._running)
+            {
+                try
+                {
+                    console.log("[DEBUG] Controllo iniziale per operazioni di sincronizzazione");
+
+                    // Verifica se ci sono impostazioni remote più recenti da scaricare
+                    console.log("[DEBUG] Verifica della presenza di impostazioni remote più recenti");
+                    this._checkForNewerRemoteSettings();
+
+                    // NON eseguiamo l'upload automatico all'avvio, solo la verifica di download
+                    // che includerà già il controllo delle date
+                }
+                catch (err)
+                {
+                    console.log("[DEBUG] Errore durante il controllo iniziale:", err);
+                    // Non interrompere il servizio in caso di errore
+                }
+            }
+        }, 3000); // Ritardo di 3 secondi per assicurarsi che tutto sia pronto
     }
+
 
     /**
      * Pause auto-sync service.
@@ -152,6 +183,8 @@ export class AutoSyncService
         this._running = false;
         this._watcher.stop();
         this._clearTimedUpload();
+
+        // Non fermare il watchdog - continuerà a monitorare
     }
 
     /**
@@ -276,76 +309,272 @@ export class AutoSyncService
 
 
     /**
+     * Verifica se ci sono impostazioni remote più recenti e avvia il download
+     */
+    private _checkForNewerRemoteSettings()
+    {
+        console.log("[DEBUG] AutoSyncService._checkForNewerRemoteSettings() - Verifica impostazioni remote");
+        try
+        {
+            // Emetti l'evento di download che contiene già la logica di controllo della data
+            console.log("[DEBUG] Emissione evento download_settings per verifica impostazioni remote");
+            this._eventEmitter.emit("download_settings");
+        }
+        catch (err)
+        {
+            console.log("[DEBUG] Errore durante la verifica delle impostazioni remote:", err);
+        }
+    }
+
+
+    /**
+     * Avvia il watchdog che controlla continuamente lo stato del servizio
+     * e lo riavvia se necessario
+     */
+    private _startWatchdog()
+    {
+        console.log("[DEBUG] AutoSyncService._startWatchdog() - Avvio watchdog per monitoraggio continuo");
+
+        // Ferma eventuali watchdog esistenti
+        this._stopWatchdog();
+
+        // Avvia un nuovo watchdog
+        this._watchdogId = setInterval(() =>
+        {
+            try
+            {
+                const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+                const settings = vscode.workspace.getConfiguration("syncing").get("settings", {}) as any;
+                const settingsAutoSync = settings && settings.auto_sync;
+
+                console.log("[DEBUG] Watchdog - Controllo stato auto-sync:");
+                console.log("[DEBUG] - autoSync.enabled:", autoSyncEnabled);
+                console.log("[DEBUG] - settings.auto_sync:", settingsAutoSync);
+                console.log("[DEBUG] - running:", this._running);
+                console.log("[DEBUG] - timerActive:", this._timeoutId !== null);
+
+                // Se autoSync dovrebbe essere attivo ma non lo è
+                if ((autoSyncEnabled || settingsAutoSync) && (!this._running || !this._timeoutId))
+                {
+                    console.log("[DEBUG] Watchdog - Rilevato arresto inatteso di auto-sync, riavvio in corso...");
+
+                    // Forza lo stop per pulire lo stato
+                    this._running = false;
+                    this._clearTimedUpload();
+
+                    // Riavvia il servizio
+                    if (this._autoRestartEnabled)
+                    {
+                        console.log("[DEBUG] Watchdog - Riavvio automatico del servizio");
+                        this._running = true;
+                        this._watcher.start();
+                        this._setupTimedUpload();
+
+                        // Dopo il riavvio, controlla se è effettivamente partito
+                        setTimeout(() =>
+                        {
+                            if (!this._timeoutId)
+                            {
+                                console.log("[DEBUG] Watchdog - Riavvio non riuscito, nuovo tentativo tra 60 secondi");
+                            }
+                            else
+                            {
+                                console.log("[DEBUG] Watchdog - Riavvio riuscito");
+                            }
+                        }, 1000);
+                    }
+                }
+            }
+            catch (err)
+            {
+                console.log("[DEBUG] Errore nel watchdog:", err);
+                // Non interrompere il watchdog in caso di errore
+            }
+        }, 15000); // Controlla ogni 15 secondi
+    }
+
+    /**
+     * Ferma il watchdog
+     */
+    private _stopWatchdog()
+    {
+        if (this._watchdogId)
+        {
+            clearInterval(this._watchdogId);
+            this._watchdogId = null;
+            console.log("[DEBUG] AutoSyncService._stopWatchdog() - Watchdog fermato");
+        }
+    }
+
+    /**
+     * Imposta forzatamente il timer di upload ignorando tutte le condizioni
+     */
+    private _setupForcedTimedUpload()
+    {
+        console.log("[DEBUG] AutoSyncService._setupForcedTimedUpload() - Configurazione upload forzata");
+
+        // Cancella eventuali timer esistenti
+        this._clearTimedUpload();
+
+        // Ottieni l'intervallo configurato nelle impostazioni
+        const config = vscode.workspace.getConfiguration("syncing");
+        const interval = config.get<number>("autoSync.interval", 30);
+        const unit = config.get<string>("autoSync.unit", "minutes");
+
+        // Calcola l'intervallo in millisecondi per il confronto
+        let intervalMs = interval * 60 * 1000; // Default è minuti
+        if (unit === "hours")
+        {
+            intervalMs = interval * 60 * 60 * 1000;
+        }
+
+        // Calcola un intervallo di controllo proporzionale all'intervallo configurato
+        // L'intervallo di controllo sarà circa 1/10 dell'intervallo configurato
+        // Con un minimo di 5 secondi e un massimo di 2 minuti
+        let checkInterval = Math.floor(intervalMs / 10);
+
+        // Imposta limiti ragionevoli
+        const MIN_CHECK_INTERVAL = 5000; // Minimo 5 secondi
+        const MAX_CHECK_INTERVAL = 120000; // Massimo 2 minuti
+
+        if (checkInterval < MIN_CHECK_INTERVAL)
+        {
+            checkInterval = MIN_CHECK_INTERVAL;
+        }
+        else if (checkInterval > MAX_CHECK_INTERVAL)
+        {
+            checkInterval = MAX_CHECK_INTERVAL;
+        }
+
+        console.log(`[DEBUG] Configurazione timer: intervallo configurato ${interval} ${unit}, intervallo di controllo: ${checkInterval / 1000} secondi`);
+
+        // Imposta il timer per l'upload automatico
+        this._timeoutId = setInterval(() =>
+        {
+            try
+            {
+                console.log("[DEBUG] Controllo timer upload automatico");
+
+                // Verifica se è passato abbastanza tempo dall'ultimo upload manuale
+                const now = Date.now();
+                const timeSinceLastUpload = now - this._lastUploadTime;
+
+                // Calcola il tempo rimanente in minuti e secondi per i log
+                const remainingMs = intervalMs - timeSinceLastUpload;
+                const remainingMinutes = Math.floor(remainingMs / 60000);
+                const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+
+                console.log("[DEBUG] -------------------------------------------------");
+                console.log(`[DEBUG] INTERVALLO CONFIGURATO: ${interval} ${unit}`);
+                console.log(`[DEBUG] Intervallo di controllo: ${checkInterval / 1000} secondi`);
+                console.log(`[DEBUG] Tempo trascorso dall'ultimo upload: ${Math.floor(timeSinceLastUpload / 60000)} min ${Math.floor((timeSinceLastUpload % 60000) / 1000)} sec`);
+
+                if (timeSinceLastUpload >= intervalMs)
+                {
+                    console.log(`[DEBUG] ESECUZIONE UPLOAD: intervallo di ${interval} ${unit} raggiunto!`);
+                    this._eventEmitter.emit("upload_settings");
+                    this._lastUploadTime = now;
+                }
+                else
+                {
+                    console.log(`[DEBUG] PROSSIMO UPLOAD TRA: ${remainingMinutes} min e ${remainingSeconds} sec (basato su impostazione ${interval} ${unit})`);
+                }
+                console.log("[DEBUG] -------------------------------------------------");
+            }
+            catch (err)
+            {
+                console.log("[DEBUG] Errore durante il controllo del timer:", err);
+                // Non interrompere il timer in caso di errore
+            }
+        }, checkInterval);
+
+        console.log(`[DEBUG] Timer upload automatico impostato con intervallo di controllo: ${checkInterval / 1000} secondi`);
+    }
+
+    /**
      * Configura l'upload automatico basato sul tempo
      */
     private _setupTimedUpload()
     {
         console.log("[DEBUG] AutoSyncService._setupTimedUpload() - Configurazione upload automatico");
 
-        // Cancella eventuali timer esistenti
-        this._clearTimedUpload();
-
-        // Controlla se l'upload automatico è abilitato
-        const config = vscode.workspace.getConfiguration("syncing");
-        const autoSyncEnabled = config.get<boolean>("autoSync.enabled", false);
-
-        console.log("[DEBUG] Upload automatico abilitato:", autoSyncEnabled);
-        console.log("[DEBUG] Servizio running:", this._running);
-
-        // Imposta il flag running a true se autoSync è abilitato
-        if (autoSyncEnabled && !this._running)
+        try
         {
-            console.log("[DEBUG] Impostazione running=true perché autoSync è abilitato");
-            this._running = true;
-        }
+            // Cancella eventuali timer esistenti
+            this._clearTimedUpload();
 
-        if (autoSyncEnabled)
-        {
-            // Ottieni l'intervallo e l'unità di tempo dalle impostazioni
-            const interval = config.get<number>("autoSync.interval", 30);
-            const unit = config.get<string>("autoSync.unit", "minutes");
+            // Controlla se l'upload automatico è abilitato
+            const config = vscode.workspace.getConfiguration("syncing");
+            const autoSyncEnabled = config.get<boolean>("autoSync.enabled", false);
 
-            // Calcola l'intervallo in millisecondi
-            let intervalMs = interval * 60 * 1000; // Default è minuti
-            if (unit === "hours")
+            console.log("[DEBUG] Upload automatico abilitato:", autoSyncEnabled);
+            console.log("[DEBUG] Servizio running:", this._running);
+
+            // Imposta il flag running a true se autoSync è abilitato
+            if (autoSyncEnabled && !this._running)
             {
-                intervalMs = interval * 60 * 60 * 1000;
+                console.log("[DEBUG] Impostazione running=true perché autoSync è abilitato");
+                this._running = true;
             }
 
-            console.log("[DEBUG] Intervallo configurato:", interval, unit, `(${intervalMs}ms)`);
+            // MODIFICA: Usiamo sempre il setup forzato per garantire l'avvio
+            this._setupForcedTimedUpload(); return;
 
-            // Usa un intervallo di controllo più breve per il debug
-            const checkInterval = 10000; // 10 secondi per il debug
-            console.log("[DEBUG] Intervallo di controllo timer impostato a:", checkInterval, "ms");
+            /* CODICE ORIGINALE COMMENTATO
+            if (autoSyncEnabled) {
+                // Ottieni l'intervallo e l'unità di tempo dalle impostazioni
+                const interval = config.get<number>("autoSync.interval", 30);
+                const unit = config.get<string>("autoSync.unit", "minutes");
 
-            // Imposta il timer per l'upload automatico
-            this._timeoutId = setInterval(() =>
-            {
-                console.log("[DEBUG] Controllo timer upload automatico");
-                // Verifica se è passato abbastanza tempo dall'ultimo upload manuale
-                const now = Date.now();
-                const timeSinceLastUpload = now - this._lastUploadTime;
-
-                console.log("[DEBUG] Tempo dall'ultimo upload:", timeSinceLastUpload, "ms, soglia:", intervalMs, "ms");
-
-                if (timeSinceLastUpload >= intervalMs)
-                {
-                    console.log("[DEBUG] Avvio upload automatico basato su timer");
-                    this._eventEmitter.emit("upload_settings");
-                    this._lastUploadTime = now;
+                // Calcola l'intervallo in millisecondi
+                let intervalMs = interval * 60 * 1000; // Default è minuti
+                if (unit === "hours") {
+                    intervalMs = interval * 60 * 60 * 1000;
                 }
-                else
-                {
-                    console.log("[DEBUG] Timer attivo ma non è ancora il momento di eseguire l'upload");
-                    console.log("[DEBUG] Prossimo upload tra:", intervalMs - timeSinceLastUpload, "ms");
-                }
-            }, checkInterval); // Intervallo di controllo più breve per il debug
 
-            console.log("[DEBUG] Timer upload automatico impostato, intervallo di controllo:", checkInterval, "ms");
+                console.log("[DEBUG] Intervallo configurato:", interval, unit, "(" + intervalMs + "ms)");
+
+                // Usa un intervallo di controllo più breve per il debug
+                const checkInterval = 10000; // 10 secondi per il debug
+                console.log("[DEBUG] Intervallo di controllo timer impostato a:", checkInterval, "ms");
+
+                // Imposta il timer per l'upload automatico
+                this._timeoutId = setInterval(() => {
+                    try {
+                        console.log("[DEBUG] Controllo timer upload automatico");
+                        // Verifica se è passato abbastanza tempo dall'ultimo upload manuale
+                        const now = Date.now();
+                        const timeSinceLastUpload = now - this._lastUploadTime;
+
+                        console.log("[DEBUG] Tempo dall'ultimo upload:", timeSinceLastUpload, "ms, soglia:", intervalMs, "ms");
+
+                        if (timeSinceLastUpload >= intervalMs) {
+                            console.log("[DEBUG] Avvio upload automatico basato su timer");
+                            this._eventEmitter.emit("upload_settings");
+                            this._lastUploadTime = now;
+                        }
+                        else {
+                            console.log("[DEBUG] Timer attivo ma non è ancora il momento di eseguire l'upload");
+                            console.log("[DEBUG] Prossimo upload tra:", intervalMs - timeSinceLastUpload, "ms");
+                        }
+                    } catch (err) {
+                        console.log("[DEBUG] Errore durante il controllo del timer:", err);
+                        // Non interrompere il timer in caso di errore
+                    }
+                }, checkInterval); // Intervallo di controllo più breve per il debug
+
+                console.log("[DEBUG] Timer upload automatico impostato, intervallo di controllo:", checkInterval, "ms");
+            }
+            else {
+                console.log("[DEBUG] Upload automatico non abilitato, timer non configurato");
+            }
+            */
         }
-        else
+        catch (err)
         {
-            console.log("[DEBUG] Upload automatico non abilitato, timer non configurato");
+            console.log("[DEBUG] Errore durante la configurazione del timer:", err);
+            // In caso di errore, utilizziamo la versione forzata per garantire il funzionamento
+            this._setupForcedTimedUpload();
         }
     }
 
@@ -362,7 +591,6 @@ export class AutoSyncService
             console.log("[DEBUG] Timer upload automatico cancellato");
         }
     }
-
 
     private async _shouldSynchronize(gist: IRemoteStorage): Promise<boolean>
     {
@@ -406,5 +634,16 @@ export class AutoSyncService
         // Emit event to trigger upload
         this._eventEmitter.emit("upload_settings");
         this._lastUploadTime = Date.now();
+    }
+
+    private _clearTimers()
+    {
+        this._clearTimedUpload();
+        this._stopWatchdog();
+    }
+
+    private _setupWatchdog()
+    {
+        this._startWatchdog();
     }
 }

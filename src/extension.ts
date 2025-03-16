@@ -6,6 +6,7 @@ import { localize, setup } from "./i18n";
 import { registerCommand } from "./utils/vscodeAPI";
 import { StorageProvider, SettingType } from "./types";
 import * as Toast from "./core/Toast";
+import { isAfter } from "./utils/date";
 import type { ISyncedItem } from "./types";
 
 let _syncing: Syncing;
@@ -163,6 +164,42 @@ function _initCommands(context: ExtensionContext)
 
                     try
                     {
+                        // Verifica se le impostazioni locali sono più recenti di quelle remote
+                        console.log("[DEBUG] Verifica se le impostazioni locali sono più recenti delle remote");
+                        try
+                        {
+                            // Ottieni impostazioni remote per il confronto delle date
+                            console.log("[DEBUG] Recupero delle impostazioni remote per confronto date");
+                            const remoteSettings = await googleDriveClient.getFiles(false);
+
+                            // Ottieni la data di modifica locale
+                            const gistSetting = VSCodeSetting.create();
+                            const localLastModified = gistSetting.getLastModified(settings);
+
+                            // Ottieni la data di modifica remota
+                            const remoteLastModified = new Date(remoteSettings.updated_at).getTime();
+
+                            console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
+                            console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
+
+                            // Verifica se le impostazioni locali sono più recenti
+                            const shouldUpload = isAfter(localLastModified, remoteLastModified);
+                            console.log("[DEBUG] Le impostazioni locali sono più recenti:", shouldUpload);
+
+                            if (!shouldUpload)
+                            {
+                                console.log("[DEBUG] Le impostazioni locali non sono più recenti, annullamento upload");
+                                Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
+                                _isSynchronizing = false;
+                                return;
+                            }
+                        }
+                        catch (err)
+                        {
+                            // In caso di errore nel confronto, log e continua con l'upload
+                            console.log("[DEBUG] Errore durante il confronto delle date, procedo con l'upload:", err);
+                        }
+
                         // Pass the filtered settings directly to uploadSettings
                         const storage = await googleDriveClient.uploadSettings(filteredSettings, true);
 
@@ -298,6 +335,8 @@ function _initCommands(context: ExtensionContext)
                 Toast.statusInfo(localize("toast.settings.downloading"));
 
                 const syncingSettings = _syncing.loadSettings();
+                let remoteSettings;
+                let shouldDownload = true; // Default a true se non possiamo controllare
 
                 // Check storage provider and call appropriate download method
                 if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
@@ -358,7 +397,28 @@ function _initCommands(context: ExtensionContext)
 
                     try
                     {
-                        const remoteSettings = await googleDriveClient.getFiles(true);
+                        console.log("[DEBUG] Recupero delle impostazioni remote da Google Drive");
+                        remoteSettings = await googleDriveClient.getFiles(true);
+
+                        // Verifica se le impostazioni remote sono più recenti di quelle locali
+                        console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
+                        const gistSetting = VSCodeSetting.create();
+                        const localSettings = await gistSetting.getSettings();
+                        const localLastModified = gistSetting.getLastModified(localSettings);
+                        const remoteLastModified = new Date(remoteSettings.updated_at).getTime();
+
+                        console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
+                        console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
+
+                        shouldDownload = isAfter(remoteLastModified, localLastModified);
+                        console.log("[DEBUG] Le impostazioni remote sono più recenti:", shouldDownload);
+
+                        if (!shouldDownload)
+                        {
+                            Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
+                            _isSynchronizing = false;
+                            return;
+                        }
 
                         // 2. Download settings.
                         const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
@@ -416,7 +476,28 @@ function _initCommands(context: ExtensionContext)
                     // 1. Get Remote Storage.
                     const remoteStorageSettings = await _syncing.prepareDownloadSettings(true);
                     const remoteStorage = _syncing.getRemoteStorageClient();
-                    const remoteSettings = await remoteStorage.get(remoteStorageSettings.id, true);
+                    console.log("[DEBUG] Recupero delle impostazioni remote da GitHub Gist");
+                    remoteSettings = await remoteStorage.get(remoteStorageSettings.id, true);
+
+                    // Verifica se le impostazioni remote sono più recenti di quelle locali
+                    console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
+                    const gistSetting = VSCodeSetting.create();
+                    const localSettings = await gistSetting.getSettings();
+                    const localLastModified = gistSetting.getLastModified(localSettings);
+                    const remoteLastModified = new Date(remoteSettings.updated_at).getTime();
+
+                    console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
+                    console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
+
+                    shouldDownload = isAfter(remoteLastModified, localLastModified);
+                    console.log("[DEBUG] Le impostazioni remote sono più recenti:", shouldDownload);
+
+                    if (!shouldDownload)
+                    {
+                        Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
+                        _isSynchronizing = false;
+                        return;
+                    }
 
                     // 2. Download settings.
                     const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
@@ -511,7 +592,7 @@ function _initAutoSync()
     _autoSyncService = AutoSyncService.create();
 
     console.log("[DEBUG] Registrazione eventi per upload/download");
-    _autoSyncService.on("upload_settings", () =>
+    _autoSyncService.on("upload_settings", async () =>
     {
         console.log("[DEBUG] Evento upload_settings emesso - avvio upload automatico");
         // Verifica se ci sono operazioni in corso prima di eseguire
@@ -531,6 +612,7 @@ function _initAutoSync()
         console.log("[DEBUG] Esecuzione comando uploadSettings");
         vscode.commands.executeCommand("syncing.uploadSettings");
     });
+
     _autoSyncService.on("download_settings", () =>
     {
         console.log("[DEBUG] Evento download_settings emesso");
@@ -539,12 +621,81 @@ function _initAutoSync()
             console.log("[DEBUG] Impossibile eseguire download - sincronizzazione in corso o estensione non pronta");
             return;
         }
+        console.log("[DEBUG] Esecuzione comando downloadSettings");
         vscode.commands.executeCommand("syncing.downloadSettings");
     });
 
     // Avvia il servizio di auto-sincronizzazione
     console.log("[DEBUG] Avvio del servizio AutoSync");
     _autoSyncService.start();
+
+    // FORCE START 1: Avvio forzato del servizio dopo 10 secondi per garantire che si avvii
+    setTimeout(() =>
+    {
+        console.log("[DEBUG] BOOTSTRAP 1: Avvio forzato del servizio AutoSync");
+        if (_autoSyncService)
+        {
+            console.log("[DEBUG] Verifica stato pre-bootstrap:");
+            console.log("[DEBUG] - _isReady:", _isReady);
+            console.log("[DEBUG] - _isSynchronizing:", _isSynchronizing);
+            console.log("[DEBUG] - autoSyncService.isRunning():", _autoSyncService.isRunning());
+
+            // Forza l'avvio anche se non siamo pronti
+            _autoSyncService.start();
+
+            // Esegui subito un controllo e avvia un upload
+            setTimeout(() =>
+            {
+                console.log("[DEBUG] BOOTSTRAP 2: Emissione forzata eventi di sincronizzazione");
+                if (_autoSyncService && _autoSyncService.isRunning())
+                {
+                    // Prima verifica download
+                    console.log("[DEBUG] Emissione forzata evento download_settings");
+                    vscode.commands.executeCommand("syncing.downloadSettings");
+
+                    // Poi dopo un ritardo, upload
+                    setTimeout(() =>
+                    {
+                        console.log("[DEBUG] Emissione forzata evento upload_settings");
+                        vscode.commands.executeCommand("syncing.uploadSettings");
+                    }, 5000);
+                }
+            }, 2000);
+        }
+    }, 10000);
+
+    // FORCE START 2: Timer che periodicamente verifica e riavvia il servizio se necessario
+    setInterval(() =>
+    {
+        // Verifica se l'autoSync è abilitato
+        const autoSyncEnabled = vscode.workspace.getConfiguration("syncing").get<boolean>("autoSync.enabled", false);
+        console.log("[DEBUG] Timer di controllo principale:");
+        console.log("[DEBUG] - _isReady:", _isReady);
+        console.log("[DEBUG] - autoSyncEnabled:", autoSyncEnabled);
+        console.log("[DEBUG] - _autoSyncService:", !!_autoSyncService);
+        console.log("[DEBUG] - isRunning:", _autoSyncService ? _autoSyncService.isRunning() : false);
+
+        // Se l'estensione è pronta, autoSync è abilitato, ma il servizio non è in esecuzione
+        if (_isReady && autoSyncEnabled && _autoSyncService && !_autoSyncService.isRunning())
+        {
+            console.log("[DEBUG] BOOTSTRAP PERIODICO: Riavvio forzato del servizio AutoSync");
+            _autoSyncService.start();
+
+            // Verifica il risultato dopo l'avvio
+            setTimeout(() =>
+            {
+                console.log("[DEBUG] Verifica dopo riavvio bootstrap periodico:");
+                console.log("[DEBUG] - isRunning:", _autoSyncService ? _autoSyncService.isRunning() : false);
+
+                // Se è partito correttamente, esegui subito un controllo
+                if (_autoSyncService && _autoSyncService.isRunning() && !_isSynchronizing)
+                {
+                    console.log("[DEBUG] Avvio verifiche post-bootstrap");
+                    vscode.commands.executeCommand("syncing.downloadSettings");
+                }
+            }, 2000);
+        }
+    }, 60000); // Controlla ogni minuto
 
     // Aggiungi un controllo periodico dello stato
     setInterval(() =>
