@@ -120,7 +120,32 @@ class I18n
             "toast.settings.synced.with.errors.multiple": "Settings synchronized with errors in {0} items",
             "toast.settings.show.reload.message": "Settings have been synchronized. Would you like to restart Cursor to apply changes?",
             "toast.settings.show.reload.button.text": "Restart Now",
-            "toast.initializing": "Initializing Syncing..."
+            "toast.initializing": "Initializing Syncing...",
+
+            // Versioning strings
+            "toast.box.choose.file.restore": "Select a file to restore",
+            "toast.box.choose.revision": "Select a revision for {0}",
+            "toast.box.choose.date.restore": "Select a date to restore all settings to",
+            "toast.settings.restoring.file": "Restoring file {0}...",
+            "toast.settings.restoring.file.success": "File {0} has been restored successfully",
+            "toast.settings.restoring.file.failed": "Failed to restore file: {0}",
+            "toast.settings.restoring.date": "Restoring all settings to {0}...",
+            "toast.settings.restoring.date.success": "Restored {0} files to {1}",
+            "toast.settings.restoring.date.no.files": "No files found to restore for the selected date",
+            "toast.settings.restoring.date.failed": "Failed to restore settings: {0}",
+            "toast.settings.restore.date.confirm": "Are you sure you want to restore all settings to {0}? This will overwrite your current settings.",
+            "toast.settings.restore.date.confirm.yes": "Yes, restore",
+            "toast.settings.restore.date.confirm.no": "Cancel",
+            "toast.settings.checking.files": "Checking available files...",
+            "toast.settings.checking.revisions": "Checking available revisions...",
+            "toast.settings.checking.dates": "Checking available dates...",
+            "toast.files.none": "No files found in Google Drive",
+            "toast.revisions.none": "No revisions found for this file",
+            "toast.dates.none": "No revision dates found",
+            "toast.files.error": "Error listing files: {0}",
+            "toast.revisions.error": "Error listing revisions: {0}",
+            "toast.dates.error": "Error listing dates: {0}",
+            "toast.settings.checking.google.folders": "Checking Google Drive folders..."
         };
 
         // Initialize with the default bundle

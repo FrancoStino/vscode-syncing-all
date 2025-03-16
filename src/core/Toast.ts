@@ -429,3 +429,317 @@ export async function showGoogleDriveFolderInputBox(forUpload: boolean = true): 
         return id;
     }
 }
+
+/**
+ * Interface for revision data returned from Google Drive
+ */
+interface IGoogleDriveRevision
+{
+    id: string;
+    modifiedTime: string;
+    originalFilename?: string;
+}
+
+/**
+ * Interface for revision item in the quick pick list
+ */
+interface IRevisionItem extends vscode.QuickPickItem
+{
+    fileId: string;
+    revisionId: string;
+    modifiedTime: string;
+}
+
+/**
+ * Interface for file item in the quick pick list
+ */
+interface IFileItem extends vscode.QuickPickItem
+{
+    fileId: string;
+    filename: string;
+}
+
+/**
+ * Converts a localized date string (DD/MM/YYYY format) to a proper Date object
+ * @param dateStr Date string in localized format
+ * @returns Valid Date object
+ */
+function parseLocalizedDate(dateStr: string): Date
+{
+    // Verifica se la data è nel formato italiano (GG/MM/AAAA, HH:MM:SS)
+    const italianDateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
+    const match = dateStr.match(italianDateRegex);
+
+    if (match)
+    {
+        // Estrai i componenti della data dal match
+        const day = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10) - 1; // Mesi in JS sono 0-indexed
+        const year = parseInt(match[3], 10);
+        const hour = parseInt(match[4], 10);
+        const minute = parseInt(match[5], 10);
+        const second = parseInt(match[6], 10);
+
+        // Crea una data valida usando i componenti numerici
+        const date = new Date(year, month, day, hour, minute, second);
+        console.log(`Data convertita da ${dateStr} a ${date.toISOString()}`);
+        return date;
+    }
+
+    // Se non è nel formato italiano, prova il parser standard di JS
+    const date = new Date(dateStr);
+
+    // Verifica che la data sia valida
+    if (isNaN(date.getTime()))
+    {
+        console.error(`Impossibile analizzare la data: ${dateStr}`);
+        // Ritorna la data corrente come fallback
+        return new Date();
+    }
+
+    return date;
+}
+
+/**
+ * Shows a quickpick with all files in Google Drive for selecting which file to restore
+ *
+ * @param googleDrive Google Drive client instance
+ * @returns Promise with the selected file data
+ */
+export async function showFileSelectQuickPick(googleDrive: any): Promise<{ fileId: string; filename: string } | undefined>
+{
+    showSpinner(localize("toast.settings.checking.files"));
+
+    try
+    {
+        const fileMap = await googleDrive.getAllFileIds();
+        clearSpinner("");
+
+        if (fileMap.size === 0)
+        {
+            await vscode.window.showInformationMessage(localize("toast.files.none"));
+            return undefined;
+        }
+
+        const items: IFileItem[] = Array.from(fileMap.entries()).map(([filename, fileId]) => ({
+            label: filename,
+            description: fileId,
+            fileId,
+            filename
+        }));
+
+        const selectedFile = await vscode.window.showQuickPick(items, {
+            ignoreFocusOut: true,
+            placeHolder: localize("toast.box.choose.file.restore")
+        });
+
+        if (!selectedFile)
+        {
+            return undefined;
+        }
+
+        return {
+            fileId: selectedFile.fileId,
+            filename: selectedFile.filename
+        };
+    }
+    catch (error: any)
+    {
+        clearSpinner("");
+        console.error("Error listing files for quickpick:", error);
+        vscode.window.showErrorMessage(localize("toast.files.error", error.message));
+        return undefined;
+    }
+}
+
+/**
+ * Shows a quickpick with all revisions of a file in Google Drive
+ *
+ * @param googleDrive Google Drive client instance
+ * @param fileId ID of the file to get revisions for
+ * @param filename Name of the file
+ * @returns Promise with the selected revision data
+ */
+export async function showRevisionsQuickPick(googleDrive: any, fileId: string, filename: string): Promise<{ fileId: string; revisionId: string; filename: string } | undefined>
+{
+    showSpinner(localize("toast.settings.checking.revisions"));
+
+    try
+    {
+        const revisions = await googleDrive.getFileRevisions(fileId) as IGoogleDriveRevision[];
+        clearSpinner("");
+
+        if (revisions.length === 0)
+        {
+            await vscode.window.showInformationMessage(localize("toast.revisions.none"));
+            return undefined;
+        }
+
+        // Debug: verifica i dati delle revisioni
+        console.log("Revisioni ricevute:", revisions);
+
+        const items: IRevisionItem[] = revisions.map((revision: IGoogleDriveRevision) =>
+        {
+            // Gestione più sicura delle date
+            let dateLabel = "Data non disponibile";
+            try
+            {
+                // Controllo che modifiedTime esista e sia una stringa valida
+                if (revision.modifiedTime)
+                {
+                    // Usa il parser personalizzato per gestire il formato italiano
+                    const date = parseLocalizedDate(revision.modifiedTime);
+                    dateLabel = date.toLocaleString();
+                }
+            }
+            catch (error)
+            {
+                console.error("Errore nella conversione della data:", error);
+            }
+
+            return {
+                label: dateLabel,
+                description: revision.id,
+                fileId,
+                revisionId: revision.id,
+                modifiedTime: revision.modifiedTime
+            };
+        });
+
+        const selectedRevision = await vscode.window.showQuickPick(items, {
+            ignoreFocusOut: true,
+            placeHolder: localize("toast.box.choose.revision", filename)
+        });
+
+        if (!selectedRevision)
+        {
+            return undefined;
+        }
+
+        return {
+            fileId,
+            revisionId: selectedRevision.revisionId,
+            filename
+        };
+    }
+    catch (error: any)
+    {
+        clearSpinner("");
+        console.error("Error listing revisions for quickpick:", error);
+        vscode.window.showErrorMessage(localize("toast.revisions.error", error.message));
+        return undefined;
+    }
+}
+
+/**
+ * Shows a quickpick with all dates available for all files
+ * Groups revisions by date for global restore
+ *
+ * @param googleDrive Google Drive client instance
+ * @returns Promise with the selected date
+ */
+export async function showDatesQuickPick(googleDrive: any): Promise<string | undefined>
+{
+    showSpinner(localize("toast.settings.checking.dates"));
+
+    try
+    {
+        // Get all files
+        const fileMap = await googleDrive.getAllFileIds();
+
+        if (fileMap.size === 0)
+        {
+            clearSpinner("");
+            await vscode.window.showInformationMessage(localize("toast.files.none"));
+            return undefined;
+        }
+
+        // Get all revisions for all files
+        const allDates = new Set<string>();
+
+        for (const [_, fileId] of fileMap.entries())
+        {
+            try
+            {
+                const revisions = await googleDrive.getFileRevisions(fileId) as IGoogleDriveRevision[];
+                console.log(`Revisioni per file ${fileId}:`, revisions);
+
+                for (const revision of revisions)
+                {
+                    try
+                    {
+                        // Verifica che modifiedTime esista e sia una stringa valida
+                        if (revision.modifiedTime)
+                        {
+                            // Usa il parser personalizzato per gestire il formato italiano
+                            const revDate = parseLocalizedDate(revision.modifiedTime);
+
+                            // Usa toLocaleDateString per estrarre solo la data (senza l'ora)
+                            const dateOnly = revDate.toLocaleDateString();
+                            allDates.add(dateOnly);
+                            console.log(`Data aggiunta: ${dateOnly} da ${revision.modifiedTime}`);
+                        }
+                    }
+                    catch (dateError)
+                    {
+                        console.error("Errore nell'elaborazione della data:", dateError);
+                    }
+                }
+            }
+            catch (fileError)
+            {
+                console.error(`Errore nel recupero delle revisioni per il file ${fileId}:`, fileError);
+            }
+        }
+
+        clearSpinner("");
+
+        if (allDates.size === 0)
+        {
+            await vscode.window.showInformationMessage(localize("toast.dates.none"));
+            return undefined;
+        }
+
+        // Sort dates in descending order (newest first)
+        const sortedDates = Array.from(allDates).sort((a, b) =>
+        {
+            try
+            {
+                const dateA = parseLocalizedDate(a);
+                const dateB = parseLocalizedDate(b);
+                return dateB.getTime() - dateA.getTime();
+            }
+            catch (error)
+            {
+                console.error("Errore durante l'ordinamento delle date:", error);
+                return 0;
+            }
+        });
+
+        console.log("Date ordinate:", sortedDates);
+
+        const items = sortedDates.map(date => ({
+            label: date,
+            description: ""
+        }));
+
+        const selectedDate = await vscode.window.showQuickPick(items, {
+            ignoreFocusOut: true,
+            placeHolder: localize("toast.box.choose.date.restore")
+        });
+
+        if (!selectedDate)
+        {
+            return undefined;
+        }
+
+        return selectedDate.label;
+    }
+    catch (error: any)
+    {
+        clearSpinner("");
+        console.error("Error listing dates for quickpick:", error);
+        vscode.window.showErrorMessage(localize("toast.dates.error", error.message));
+        return undefined;
+    }
+}

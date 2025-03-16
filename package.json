@@ -59,6 +59,14 @@
             {
                 "command": "syncing.resetSyncState",
                 "title": "Syncing: Reset Synchronization State"
+            },
+            {
+                "command": "syncing.restoreFileVersion",
+                "title": "Syncing: Restore Single File Version"
+            },
+            {
+                "command": "syncing.restoreAllSettingsToDate",
+                "title": "Syncing: Restore All Settings to Specific Date"
             }
         ],
         "configuration": [

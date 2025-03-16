@@ -531,6 +531,148 @@ function _initCommands(context: ExtensionContext)
             _syncing.openSettings();
         })
     );
+
+    // Register restore single file version command
+    context.subscriptions.push(
+        registerCommand(context, "syncing.restoreFileVersion", async () =>
+        {
+            if (!_isReady || _isSynchronizing)
+            {
+                console.log(`[DEBUG] Restore file version non avviato: _isReady=${_isReady}, _isSynchronizing=${_isSynchronizing}`);
+                return;
+            }
+
+            try
+            {
+                console.log("[DEBUG] Inizio dell'operazione di restore file version");
+                _isSynchronizing = true;
+
+                // Get the Google Drive client
+                const googleDrive = _syncing.getGoogleDriveClient();
+
+                // Show file selection quickpick
+                const fileSelection = await Toast.showFileSelectQuickPick(googleDrive);
+                if (!fileSelection)
+                {
+                    _isSynchronizing = false;
+                    return;
+                }
+
+                // Show revisions quickpick for the selected file
+                const revisionSelection = await Toast.showRevisionsQuickPick(
+                    googleDrive,
+                    fileSelection.fileId,
+                    fileSelection.filename
+                );
+
+                if (!revisionSelection)
+                {
+                    _isSynchronizing = false;
+                    return;
+                }
+
+                // Show progress notification
+                Toast.statusInfo(localize("toast.settings.restoring.file", fileSelection.filename));
+
+                // Restore the selected file revision
+                await _syncing.restoreFileRevision(
+                    revisionSelection.fileId,
+                    revisionSelection.revisionId,
+                    revisionSelection.filename
+                );
+
+                // Show success notification
+                Toast.statusInfo(localize("toast.settings.restoring.file.success", fileSelection.filename));
+
+                // Ask if user wants to restart VSCode to apply changes
+                await _showRestartPrompt();
+            }
+            catch (err: any)
+            {
+                console.error("[DEBUG] Errore durante il ripristino versione file:", err);
+                Toast.statusError(localize("toast.settings.restoring.file.failed", err.message || err));
+            }
+            finally
+            {
+                _isSynchronizing = false;
+            }
+        })
+    );
+
+    // Register restore all settings to date command
+    context.subscriptions.push(
+        registerCommand(context, "syncing.restoreAllSettingsToDate", async () =>
+        {
+            if (!_isReady || _isSynchronizing)
+            {
+                console.log(`[DEBUG] Restore all settings non avviato: _isReady=${_isReady}, _isSynchronizing=${_isSynchronizing}`);
+                return;
+            }
+
+            try
+            {
+                console.log("[DEBUG] Inizio dell'operazione di restore all settings");
+                _isSynchronizing = true;
+
+                // Get the Google Drive client
+                const googleDrive = _syncing.getGoogleDriveClient();
+
+                // Show date selection quickpick
+                const selectedDate = await Toast.showDatesQuickPick(googleDrive);
+                if (!selectedDate)
+                {
+                    _isSynchronizing = false;
+                    return;
+                }
+
+                // Ask for confirmation
+                const confirmRestore = await vscode.window.showWarningMessage(
+                    localize("toast.settings.restore.date.confirm", selectedDate),
+                    { modal: true },
+                    localize("toast.settings.restore.date.confirm.yes"),
+                    localize("toast.settings.restore.date.confirm.no")
+                );
+
+                if (confirmRestore !== localize("toast.settings.restore.date.confirm.yes"))
+                {
+                    _isSynchronizing = false;
+                    return;
+                }
+
+                // Show progress notification
+                Toast.statusInfo(localize("toast.settings.restoring.date", selectedDate));
+
+                // Restore all settings to the selected date
+                const result = await _syncing.restoreSettingsFromDate(selectedDate);
+
+                if (result.success)
+                {
+                    // Show success notification with number of restored files
+                    Toast.statusInfo(localize(
+                        "toast.settings.restoring.date.success",
+                        result.restoredFiles.length,
+                        selectedDate
+                    ));
+
+                    // Ask if user wants to restart VSCode to apply changes
+                    await _showRestartPrompt();
+                }
+                else
+                {
+                    Toast.statusInfo(localize("toast.settings.restoring.date.no.files"));
+                }
+            }
+            catch (err: any)
+            {
+                console.error("[DEBUG] Errore durante il ripristino impostazioni:", err);
+                Toast.statusError(localize("toast.settings.restoring.date.failed", err.message || err));
+            }
+            finally
+            {
+                _isSynchronizing = false;
+            }
+        })
+    );
 }
 
 /**

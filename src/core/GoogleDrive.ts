@@ -746,6 +746,207 @@ export class GoogleDrive
         }
     }
 
+
+    /**
+     * Gets file revisions from Google Drive.
+     * @param fileId ID of the file to get revisions for
+     * @returns Promise with an array of revision objects
+     */
+    public async getFileRevisions(fileId: string): Promise<Array<{ id: string; modifiedTime: string; originalFilename?: string }>>
+    {
+        if (!this._auth)
+        {
+            throw createError(localize("error.check.google.credentials"), 401);
+        }
+
+        const drive = google.drive({ version: "v3", auth: this._auth });
+
+        try
+        {
+            console.log(`Recupero revisioni per il file: ${fileId}`);
+
+            // Call the revisions.list method to get all revisions of the file
+            const response = await drive.revisions.list({
+                fileId,
+                fields: "revisions(id, modifiedTime, originalFilename)"
+            });
+
+            const revisions = response.data?.revisions || [];
+            console.log(`Trovate ${revisions.length} revisioni per il file ${fileId}`);
+
+            // Debug: mostra i dati grezzi delle revisioni
+            console.log("Dati revisioni:", JSON.stringify(revisions, null, 2));
+
+            // Sort revisions by modifiedTime in descending order (newest first)
+            return revisions
+                .map(revision =>
+                {
+                    // Assicuriamoci che modifiedTime sia una stringa valida
+                    let formattedDate = "";
+                    if (revision.modifiedTime)
+                    {
+                        try
+                        {
+                            // Usa ISO date string direttamente dall'API Google, se disponibile
+                            if (typeof revision.modifiedTime === "string" &&
+                                (revision.modifiedTime.includes("T") || revision.modifiedTime.includes("Z")))
+                            {
+                                // È probabilmente già in formato ISO
+                                const date = new Date(revision.modifiedTime);
+                                if (!isNaN(date.getTime()))
+                                {
+                                    formattedDate = date.toLocaleString();
+                                }
+                                else
+                                {
+                                    throw new Error("Data ISO non valida");
+                                }
+                            }
+                            else
+                            {
+                                // Potrebbe essere già una data formattata localmente
+                                formattedDate = revision.modifiedTime;
+
+                                // Verifica se la data è valida
+                                const parsedDate = this._parseLocalizedDate(formattedDate);
+                                if (isNaN(parsedDate.getTime()))
+                                {
+                                    throw new Error("Data localizzata non valida");
+                                }
+                            }
+                        }
+                        catch (error)
+                        {
+                            console.error(`Errore nel convertire la data: ${revision.modifiedTime}`, error);
+                            formattedDate = new Date().toLocaleString();
+                        }
+                    }
+                    else
+                    {
+                        console.warn("Revisione senza data di modifica");
+                        // Usa la data corrente come fallback se manca modifiedTime
+                        formattedDate = new Date().toLocaleString();
+                    }
+
+                    return {
+                        id: revision.id || "",
+                        modifiedTime: formattedDate,
+                        originalFilename: revision.originalFilename || undefined
+                    };
+                })
+                .sort((a, b) =>
+                {
+                    try
+                    {
+                        const dateA = this._parseLocalizedDate(a.modifiedTime);
+                        const dateB = this._parseLocalizedDate(b.modifiedTime);
+
+                        return dateB.getTime() - dateA.getTime();
+                    }
+                    catch (error)
+                    {
+                        console.error("Errore nell'ordinamento delle revisioni", error);
+                        return 0;
+                    }
+                });
+        }
+        catch (err: any)
+        {
+            console.error(`Error getting revisions for file ${fileId}:`, err);
+            throw this._createError(err);
+        }
+    }
+
+    /**
+     * Gets a specific revision of a file from Google Drive.
+     * @param fileId ID of the file
+     * @param revisionId ID of the revision to download
+     * @returns Promise with the file content
+     */
+    public async downloadFileRevision(fileId: string, revisionId: string): Promise<string>
+    {
+        if (!this._auth)
+        {
+            throw createError(localize("error.check.google.credentials"), 401);
+        }
+
+        const drive = google.drive({ version: "v3", auth: this._auth });
+
+        try
+        {
+            // Get the revision
+            const response = await drive.revisions.get({
+                fileId,
+                revisionId,
+                alt: "media"
+            });
+
+            // Handle different response types
+            let content = "";
+            if (typeof response.data === "string")
+            {
+                content = response.data;
+            }
+            else if (Buffer.isBuffer(response.data))
+            {
+                content = response.data.toString("utf8");
+            }
+            else if (response.data !== null && typeof response.data === "object")
+            {
+                content = JSON.stringify(response.data);
+            }
+
+            return content;
+        }
+        catch (err: any)
+        {
+            console.error(`Error downloading revision ${revisionId} for file ${fileId}:`, err);
+            throw this._createError(err);
+        }
+    }
+
+    /**
+     * Gets all file IDs and their names from the Syncing folder
+     * @returns Promise with a map of file names to their IDs
+     */
+    public async getAllFileIds(): Promise<Map<string, string>>
+    {
+        if (!this._auth)
+        {
+            throw createError(localize("error.check.google.credentials"), 401);
+        }
+
+        try
+        {
+            const folderId = await this._getOrCreateFolder();
+            const drive = google.drive({ version: "v3", auth: this._auth });
+
+            const response = await drive.files.list({
+                q: `'${folderId}' in parents and trashed=false`,
+                spaces: "drive",
+                fields: "files(id, name)"
+            });
+
+            const files = response.data?.files || [];
+            const fileMap = new Map<string, string>();
+
+            for (const file of files)
+            {
+                if (file.id && file.name)
+                {
+                    fileMap.set(file.name, file.id);
+                }
+            }
+
+            return fileMap;
+        }
+        catch (err: any)
+        {
+            console.error("Error getting file IDs:", err);
+            throw this._createError(err);
+        }
+    }
+
     /**
      * Escape special characters in a string for use in a Google Drive query
      */
@@ -1030,5 +1231,46 @@ export class GoogleDrive
         }
 
         return createError(error.message || localize("error.check.google.credentials"), error.code || 500);
+    }
+
+    /**
+     * Converts a localized date string (DD/MM/YYYY format) to a proper Date object
+     * @param dateStr Date string in localized format
+     * @returns Valid Date object
+     */
+    private _parseLocalizedDate(dateStr: string): Date
+    {
+        // Verifica se la data è nel formato italiano (GG/MM/AAAA, HH:MM:SS)
+        const italianDateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
+        const match = dateStr.match(italianDateRegex);
+
+        if (match)
+        {
+            // Estrai i componenti della data dal match
+            const day = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10) - 1; // Mesi in JS sono 0-indexed
+            const year = parseInt(match[3], 10);
+            const hour = parseInt(match[4], 10);
+            const minute = parseInt(match[5], 10);
+            const second = parseInt(match[6], 10);
+
+            // Crea una data valida usando i componenti numerici
+            const date = new Date(year, month, day, hour, minute, second);
+            console.log(`Data convertita da ${dateStr} a ${date.toISOString()}`);
+            return date;
+        }
+
+        // Se non è nel formato italiano, prova il parser standard di JS
+        const date = new Date(dateStr);
+
+        // Verifica che la data sia valida
+        if (isNaN(date.getTime()))
+        {
+            console.error(`Impossibile analizzare la data: ${dateStr}`);
+            // Ritorna la data corrente come fallback
+            return new Date();
+        }
+
+        return date;
     }
 }
