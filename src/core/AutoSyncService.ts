@@ -1,21 +1,20 @@
 import { EventEmitter } from "events";
 import * as vscode from "vscode";
 
-import { Gist } from "./Gist";
 import { GoogleDrive } from "./GoogleDrive";
 import { isAfter } from "../utils/date";
 import { localize } from "../i18n";
 import { SettingsWatcherService, WatcherEvent } from "../watcher";
 import { VSCodeSetting } from "./VSCodeSetting";
-import { StorageProvider } from "../types";
 import * as Toast from "./Toast";
+import { SyncTracker } from "./SyncTracker";
 import type { IRemoteStorage, ISyncingSettings } from "../types";
 
 export class AutoSyncService
 {
     private static _instance: AutoSyncService;
 
-    private _gistSetting: VSCodeSetting;
+    private _settingManager: VSCodeSetting;
     private _watcher: SettingsWatcherService;
     private _running: boolean = false;
     private _eventEmitter: EventEmitter;
@@ -27,7 +26,7 @@ export class AutoSyncService
     private constructor()
     {
         console.log("[DEBUG] AutoSyncService constructor - Inizializzazione servizio");
-        this._gistSetting = VSCodeSetting.create();
+        this._settingManager = VSCodeSetting.create();
         this._watcher = new SettingsWatcherService();
         this._eventEmitter = new EventEmitter();
         this._watcher.on(WatcherEvent.ALL, () => { this._handleWatcherEvent(); });
@@ -198,72 +197,41 @@ export class AutoSyncService
         {
             Toast.showSpinner(localize("toast.settings.autoSync.checkingSettings"));
 
-            // Check if storage provider has valid settings
-            if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
+            // Utilizziamo sempre Google Drive
+            console.log("[DEBUG] Sincronizzazione con Google Drive");
+
+            const googleDriveClient = GoogleDrive.create();
+
+            // Verifica se abbiamo un refresh token, se no, non possiamo sincronizzare
+            if (!syncingSettings.google_refresh_token)
             {
-                console.log("[DEBUG] Sincronizzazione con Google Drive");
-
-                if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret || !syncingSettings.google_refresh_token)
-                {
-                    console.log("[DEBUG] Errore: Credenziali Google Drive mancanti");
-                    throw new Error(localize("error.missing.google.credentials"));
-                }
-
-                const drive = GoogleDrive.create(
-                    syncingSettings.google_client_id,
-                    syncingSettings.google_client_secret,
-                    syncingSettings.google_refresh_token,
-                    syncingSettings.id
-                );
-
-                // 1. Check remote settings.
-                console.log("[DEBUG] Verifica impostazioni remote su Google Drive");
-                const remoteGist = await drive.getFiles();
-
-                // 2. Check if need synchronize.
-                console.log("[DEBUG] Controllo necessità di sincronizzazione");
-                const shouldSync = await this._shouldSynchronize(remoteGist);
-
-                console.log("[DEBUG] Sincronizzazione necessaria:", shouldSync);
-
-                if (shouldSync)
-                {
-                    // 3. Synchronize settings.
-                    console.log("[DEBUG] Avvio salvataggio impostazioni remote");
-                    await this._gistSetting.saveSettings(remoteGist);
-                    console.log("[DEBUG] Salvataggio impostazioni completato");
-                }
+                console.log("[DEBUG] Errore: Refresh token Google Drive mancante");
+                throw new Error(localize("error.missing.google.credentials"));
             }
-            else
+
+            // Se non c'è l'ID della cartella, non possiamo sincronizzare
+            if (!syncingSettings.id)
             {
-                // GitHub Gist
-                console.log("[DEBUG] Sincronizzazione con GitHub Gist");
+                console.log("[DEBUG] Errore: ID cartella Google Drive mancante");
+                throw new Error(localize("error.no.folder.id"));
+            }
 
-                if (!syncingSettings.token || !syncingSettings.id)
-                {
-                    console.log("[DEBUG] Errore: Token o ID GitHub Gist mancanti");
-                    throw new Error(localize("error.empty.token.or.id"));
-                }
+            // 1. Check remote settings.
+            console.log("[DEBUG] Verifica impostazioni remote su Google Drive");
+            const remoteGist = await googleDriveClient.getFiles();
 
-                const api = Gist.create(syncingSettings.token);
+            // 2. Check if need synchronize.
+            console.log("[DEBUG] Controllo necessità di sincronizzazione");
+            const shouldSync = await this._shouldSynchronize(remoteGist);
 
-                // 1. Check remote settings.
-                console.log("[DEBUG] Verifica impostazioni remote su GitHub Gist");
-                const remoteGist = await api.get(syncingSettings.id);
+            console.log("[DEBUG] Sincronizzazione necessaria:", shouldSync);
 
-                // 2. Check if need synchronize.
-                console.log("[DEBUG] Controllo necessità di sincronizzazione");
-                const shouldSync = await this._shouldSynchronize(remoteGist);
-
-                console.log("[DEBUG] Sincronizzazione necessaria:", shouldSync);
-
-                if (shouldSync)
-                {
-                    // 3. Synchronize settings.
-                    console.log("[DEBUG] Avvio salvataggio impostazioni remote");
-                    await this._gistSetting.saveSettings(remoteGist);
-                    console.log("[DEBUG] Salvataggio impostazioni completato");
-                }
+            if (shouldSync)
+            {
+                // 3. Synchronize settings.
+                console.log("[DEBUG] Avvio salvataggio impostazioni remote");
+                await this._settingManager.saveSettings(remoteGist);
+                console.log("[DEBUG] Salvataggio impostazioni completato");
             }
             console.log("[DEBUG] Sincronizzazione completata senza modifiche");
             Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
@@ -592,33 +560,72 @@ export class AutoSyncService
         }
     }
 
-    private async _shouldSynchronize(gist: IRemoteStorage): Promise<boolean>
+    private async _shouldSynchronize(remoteStorage: IRemoteStorage): Promise<boolean>
     {
         console.log("[DEBUG] AutoSyncService._shouldSynchronize() - Verifica necessità di sincronizzazione");
 
         try
         {
+            // Otteniamo l'istanza del tracker
+            const syncTracker = SyncTracker.create();
+
             // Gets the last modified time (in milliseconds) of the local settings.
             console.log("[DEBUG] Recupero impostazioni locali");
-            const local = await this._gistSetting.getSettings();
+            const local = await this._settingManager.getSettings();
 
-            // Gets the last modified time (in milliseconds) of the remote gist.
-            const remoteLastModified = new Date(gist.updated_at).getTime();
+            // Gets the last modified time (in milliseconds) of the remote storage.
+            const remoteLastModified = new Date(remoteStorage.updated_at).getTime();
             console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
 
             // Compares the local and remote settings.
-            const localLastModified = this._gistSetting.getLastModified(local);
+            const localLastModified = this._settingManager.getLastModified(local);
             console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
+            console.log("[DEBUG] Data ultima sincronizzazione:", new Date(syncTracker.getLastSyncTimestamp()).toISOString());
 
+            // Verifica del timestamp come prima
             const remoteIsNewer = isAfter(remoteLastModified, localLastModified);
-            console.log("[DEBUG] Remoto più recente del locale:", remoteIsNewer);
+            console.log("[DEBUG] Remoto più recente del locale (solo timestamp):", remoteIsNewer);
 
-            if (remoteIsNewer)
+            if (!remoteIsNewer)
             {
-                console.log("[DEBUG] Sincronizzazione necessaria: le impostazioni remote sono più recenti");
+                console.log("[DEBUG] Sincronizzazione non necessaria: le impostazioni locali sono più recenti");
+                return false;
+            }
+
+            // Se il timestamp remoto è più recente, verifichiamo il contenuto effettivo
+            console.log("[DEBUG] Verifica contenuto effettivo dei file");
+
+            // Estrai i file in un formato compatibile con SyncTracker
+            const fileContents: Record<string, string | Buffer> = {};
+            if (remoteStorage.files)
+            {
+                for (const [filename, fileInfo] of Object.entries(remoteStorage.files))
+                {
+                    if (fileInfo.content)
+                    {
+                        fileContents[filename] = fileInfo.content;
+                    }
+                }
+            }
+
+            // Controlla se ci sono modifiche reali nel contenuto
+            const needsDownload = syncTracker.shouldDownload(fileContents, remoteLastModified);
+
+            if (needsDownload)
+            {
+                console.log("[DEBUG] Sincronizzazione necessaria: rilevate modifiche effettive nei file");
+
+                // Se è necessario scaricare, aggiorniamo il tracker dopo il download
+                // Questo verrà fatto nella funzione saveSettings
                 return true;
             }
-            console.log("[DEBUG] Sincronizzazione non necessaria: le impostazioni locali sono aggiornate");
+
+            // Se arriviamo qui, significa che i file remoti hanno un timestamp più recente
+            // ma il contenuto è identico, quindi aggiorniamo il timestamp locale
+            console.log("[DEBUG] Nessuna modifica effettiva rilevata, aggiornamento solo timestamp");
+            syncTracker.updateSyncState(fileContents);
+
+            console.log("[DEBUG] Sincronizzazione non necessaria: contenuto identico");
             return false;
         }
         catch (err: any)

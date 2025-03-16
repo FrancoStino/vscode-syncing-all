@@ -4,12 +4,12 @@
 export interface ISyncingSettings
 {
     /**
-     * Store the GitHub Gist ID or Google Drive Folder ID.
+     * Store the Google Drive Folder ID.
      */
     id: string;
 
     /**
-     * Store the GitHub Personal Access Token.
+     * Store the access token (not used with Google Drive).
      */
     token: string;
 

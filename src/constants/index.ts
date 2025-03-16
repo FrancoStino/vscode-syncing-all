@@ -27,7 +27,7 @@ export const CONFIGURATION_DEFAULT_STORAGE_PROVIDER = "defaultStorageProvider";
 /**
  * Default storage provider
  */
-export const DEFAULT_STORAGE_PROVIDER: StorageProvider = StorageProvider.GitHubGist;
+export const DEFAULT_STORAGE_PROVIDER: StorageProvider = StorageProvider.GoogleDrive;
 
 /**
  * Default Google Drive client ID

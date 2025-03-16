@@ -17,12 +17,12 @@ import type { IGist as IRemoteStorage, IGistFiles as IRemoteFiles, ISetting } fr
  */
 export class GoogleDrive
 {
-    private static _instance: GoogleDrive;
-
     /**
      * The folder name for Syncing's files in Google Drive.
      */
     private static readonly FOLDER_NAME: string = "VSCode's Settings - Syncing";
+
+    private static _instance: GoogleDrive;
 
     private _auth: any;
     private _folderId: string | undefined;
@@ -256,6 +256,38 @@ export class GoogleDrive
                 }, 5 * 60 * 1000); // 5 minutes timeout
             });
 
+            // Prima di aprire il browser, mostra un messaggio persistente
+            showSpinner(localize("toast.google.auth.wait"));
+
+            // Mostra una notifica toast con pulsante "Procedi" PRIMA di aprire il browser
+            const proceedButton = localize("button.proceed");
+            const urlButton = localize("button.copy.url");
+
+            // Utilizziamo una Promise per attendere la conferma dell'utente
+            await new Promise<void>((resolve) =>
+            {
+                vscode.window.showInformationMessage(
+                    localize("toast.google.auth.browser.opened"),
+                    proceedButton,
+                    urlButton
+                ).then(selection =>
+                {
+                    if (selection === urlButton)
+                    {
+                        vscode.env.clipboard.writeText(authUrl);
+                        vscode.window.showInformationMessage(localize("toast.url.copied"));
+                    }
+
+                    // Solo se l'utente clicca "Procedi", continuiamo il processo
+                    if (selection === proceedButton)
+                    {
+                        resolve();
+                    }
+                });
+            });
+
+            // Non serve più un delay poiché l'utente ha già confermato esplicitamente
+
             // Open the URL in the browser
             console.log("Attempting to open browser with URL:", authUrl);
             try
@@ -269,19 +301,6 @@ export class GoogleDrive
                 }
 
                 console.log("Browser opened successfully");
-
-                // Show a message to the user
-                vscode.window.showInformationMessage(
-                    localize("toast.google.auth.browser.opened"),
-                    localize("button.copy.url")
-                ).then(selection =>
-                {
-                    if (selection === localize("button.copy.url"))
-                    {
-                        vscode.env.clipboard.writeText(authUrl);
-                        vscode.window.showInformationMessage(localize("toast.url.copied"));
-                    }
-                });
             }
             catch (openError)
             {
@@ -318,7 +337,8 @@ export class GoogleDrive
             const refreshToken = await this.getRefreshToken(authCode);
             console.log("Refresh token successfully obtained");
 
-            // Show success message
+            // Clear the spinner e show success message
+            clearSpinner("");
             vscode.window.showInformationMessage(localize("toast.google.auth.success"));
 
             // Update the instance's refresh token

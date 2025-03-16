@@ -23,6 +23,7 @@ import { readLastModified, writeLastModified } from "../utils/file";
 import { SettingType } from "../types";
 import * as Toast from "./Toast";
 import type { IExtension, ISetting, ISyncedItem, IGist as IRemoteStorage, IGistFile as IRemoteFile } from "../types";
+import { SyncTracker } from "./SyncTracker";
 
 /**
  * `VSCode Settings` wrapper.
@@ -314,6 +315,21 @@ export class VSCodeSetting
                     // Remove settings.
                     const removed = await this.removeSettings(settingsToRemove);
                     syncedItems.removed = removed;
+
+                    // Dopo aver completato il download con successo, aggiorna il SyncTracker
+                    const downloadedFiles: Record<string, string | Buffer> = {};
+                    for (const setting of settingsToSave)
+                    {
+                        if (setting.content && setting.remoteFilename)
+                        {
+                            downloadedFiles[setting.remoteFilename] = setting.content;
+                        }
+                    }
+
+                    // Aggiorna lo stato di sincronizzazione
+                    const syncTracker = SyncTracker.create();
+                    syncTracker.updateSyncState(downloadedFiles);
+                    console.log("[DEBUG] SyncTracker: Stato aggiornato dopo download completato");
 
                     if (showIndicator)
                     {

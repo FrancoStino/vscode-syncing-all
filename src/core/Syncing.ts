@@ -2,7 +2,7 @@
 import * as fs from "fs-extra";
 
 import { Environment } from "./Environment";
-import { Gist } from "./Gist";
+import { GoogleDriveAdapter } from "./GoogleDriveAdapter";
 import { GoogleDrive } from "./GoogleDrive";
 import { isEmptyString } from "../utils/lang";
 import { localize } from "../i18n";
@@ -101,10 +101,10 @@ export class Syncing
     /**
      * Gets the Remote Storage client.
      */
-    public getRemoteStorageClient(): Gist
+    public getRemoteStorageClient(): GoogleDriveAdapter
     {
         const settings = this.loadSettings();
-        return Gist.create(settings.token, settings.http_proxy);
+        return GoogleDriveAdapter.create(settings.token, settings.http_proxy);
     }
 
     /**
@@ -221,115 +221,48 @@ export class Syncing
     /**
      * Prepare `Syncing`'s settings, will ask for settings if the settings are not existed.
      *
-     * @param forUpload Whether to show messages for upload. Defaults to `true`.
+     * @param _forUpload Whether to show messages for upload. Defaults to `true`.
      * @param showIndicator Whether to show the progress indicator. Defaults to `false`.
      */
-    public async prepareSettings(forUpload: boolean = true, showIndicator: boolean = false): Promise<ISyncingSettings>
+    public async prepareSettings(_forUpload: boolean = true, showIndicator: boolean = false): Promise<ISyncingSettings>
     {
-        if (showIndicator)
-        {
-            Toast.showSpinner(localize("toast.syncing.checking.settings"));
-        }
-
         try
         {
-            const settings: ISyncingSettings = this.loadSettings();
-            settings.token = settings.token || "";
-            settings.id = settings.id || "";
+            const settings = this.loadSettings();
 
-            // Skip access token request if using Google Drive
+            // Imposta sempre Google Drive come provider
+            settings.storage_provider = StorageProvider.GoogleDrive;
+
+            // Gestisci le credenziali di Google Drive
             if (settings.storage_provider === StorageProvider.GoogleDrive)
             {
-                // Check if Google credentials are missing but considering defaults
-                const hasGoogleClientId = settings.google_client_id || DEFAULT_GOOGLE_CLIENT_ID;
-                const hasGoogleClientSecret = settings.google_client_secret || DEFAULT_GOOGLE_CLIENT_SECRET;
-                const isMissingGoogleCredentials = !hasGoogleClientId || !hasGoogleClientSecret;
-
-                if (isMissingGoogleCredentials)
+                // Se non ci sono credenziali, usa quelle di default
+                if (!settings.google_client_id || !settings.google_client_secret)
                 {
-                    // Show a helpful error message with instructions instead of resetting
-                    if (showIndicator)
-                    {
-                        Toast.clearSpinner("");
-                    }
-
-                    throw new Error(localize("error.missing.google.credentials.instructions"));
+                    settings.google_client_id = DEFAULT_GOOGLE_CLIENT_ID;
+                    settings.google_client_secret = DEFAULT_GOOGLE_CLIENT_SECRET;
                 }
 
-                // For Google Drive, we only need to check if ID is empty for downloading
-                if ((settings.id == null || isEmptyString(settings.id)) && !forUpload)
-                {
-                    throw new Error(localize("error.check.folder.id"));
-                }
-
-                // If we're missing the refresh token, we should initiate the authentication flow
-                if (!settings.google_refresh_token)
-                {
-                    // Get Google Drive client to initiate authentication
-                    const googleDrive = this.getGoogleDriveClient();
-
-                    // Start authentication process by opening the browser
-                    await googleDrive.authenticate();
-
-                    // After authentication, get the refresh token and save it to settings
-                    if (googleDrive.refreshToken)
-                    {
-                        settings.google_refresh_token = googleDrive.refreshToken;
-                        await this.saveSettings(settings, true);
-
-                        // Instead of throwing an error, return the updated settings
-                        if (showIndicator)
-                        {
-                            Toast.clearSpinner("");
-                        }
-                        return settings;
-                    }
-
-                    // Authentication flow will continue via the URI handler
-                    throw new Error(localize("toast.google.auth.wait"));
-                }
-            }
-            else
-            {
-                // Only check access token for GitHub Gist provider
-                // Ask for token when:
-                // 1. uploading with an empty token
-                // 2. downloading with an empty token and an empty storage ID.
-                if ((settings.token == null || isEmptyString(settings.token)) && (forUpload || isEmptyString(settings.id)))
-                {
-                    settings.token = await Toast.showGitHubTokenInputBox(forUpload);
-                }
-                if (settings.id == null || isEmptyString(settings.id))
-                {
-                    settings.id = await this._requestStorageID(settings.token, forUpload);
-                }
+                // Se non c'è un refresh token, l'autenticazione verrà gestita da GoogleDrive
+                // Se non c'è un ID cartella, la selezione verrà gestita da GoogleDrive
             }
 
             await this.saveSettings(settings, true);
 
             if (showIndicator)
             {
-                Toast.clearSpinner("");
+                Toast.statusInfo(localize("toast.settings.prepared"));
             }
+
             return settings;
         }
-        catch (error: any)
+        catch (err)
         {
             if (showIndicator)
             {
-                Toast.clearSpinner("");
-
-                // Only show error as uploading/downloading canceled if it's not an authentication message
-                if (error.message !== localize("toast.google.auth.wait"))
-                {
-                    Toast.statusError(
-                        forUpload
-                            ? localize("toast.settings.uploading.canceled", error.message)
-                            : localize("toast.settings.downloading.canceled", error.message)
-                    );
-                }
+                Toast.statusError(err.message);
             }
-            throw error;
+            throw err;
         }
     }
 
@@ -583,31 +516,9 @@ export class Syncing
     }
 
     /**
-     * Ask user for storage ID.
-     *
-     * @param token GitHub Personal Access Token.
-     * @param forUpload Whether to show messages for upload. Defaults to `true`.
-     */
-    private async _requestStorageID(token: string, forUpload: boolean = true): Promise<string>
-    {
-        if (token != null && !isEmptyString(token))
-        {
-            const api: Gist = Gist.create(token, this.proxy);
-            const id = await Toast.showRemoteStorageListBox(api, forUpload);
-            if (isEmptyString(id))
-            {
-                // Show storage input box when id is still not supplied.
-                return Toast.showStorageInputBox(forUpload);
-            }
-            return id;
-        }
-        return Toast.showStorageInputBox(forUpload);
-    }
-
-    /**
-     * Converts a localized date string (DD/MM/YYYY format) to a proper Date object
-     * @param dateStr Date string in localized format
-     * @returns Valid Date object
+     * Parses a localized date string into a Date object.
+     * @param dateStr The date string to parse
+     * @returns A Date object
      */
     private _parseLocalizedDate(dateStr: string): Date
     {

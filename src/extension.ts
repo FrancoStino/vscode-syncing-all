@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "vscode";
 import * as vscode from "vscode";
+import * as path from "path";
 
 import { Syncing, VSCodeSetting, AutoSyncService } from "./core";
 import { localize, setup } from "./i18n";
@@ -8,12 +9,16 @@ import { StorageProvider, SettingType } from "./types";
 import * as Toast from "./core/Toast";
 import { isAfter } from "./utils/date";
 import type { ISyncedItem } from "./types";
+import { SyncTracker } from "./core/SyncTracker";
+import { Environment } from "./core/Environment";
+import type { ISetting } from "./types";
 
+let _env: Environment;
 let _syncing: Syncing;
 let _vscodeSetting: VSCodeSetting;
 let _autoSyncService: AutoSyncService;
-let _isReady: boolean;
-let _isSynchronizing: boolean;
+let _isReady: boolean = false;
+let _isSynchronizing: boolean = false;
 
 export function activate(context: ExtensionContext)
 {
@@ -39,10 +44,10 @@ export function activate(context: ExtensionContext)
                 console.log("URI handler called with:", uri.toString());
 
                 // Extract the path part from URI - works with both cursor:// and vscode://
-                const path = uri.path;
+                const uriPath = uri.path;
 
                 // If we're in the middle of OAuth flow (from the oauth2callback path)
-                if (path === "/oauth2callback")
+                if (uriPath === "/oauth2callback")
                 {
                     console.log("OAuth callback received - but no action taken, using direct approach instead");
 
@@ -95,23 +100,32 @@ function _initCommands(context: ExtensionContext)
                     !(setting.type === SettingType.Settings &&
                         setting.remoteFilename === "syncing.json"));
 
-                // 2. Upload settings.
+                // 2. Aggiungi il file di tracking alla lista dei file da sincronizzare
+                const syncTracker = SyncTracker.create();
+                const trackerContent = syncTracker.getContent();
+
+                // Aggiungi il file di tracking come un'impostazione speciale
+                const trackerSetting = {
+                    type: SettingType.Settings,
+                    localFilePath: path.join(_env.userDirectory, "sync-tracker.json"),
+                    remoteFilename: syncTracker.remoteFilename,
+                    content: trackerContent
+                } as ISetting;
+
+                // Aggiungi il tracker alle impostazioni filtrate
+                filteredSettings.push(trackerSetting);
+
+                // 3. Upload settings.
                 const syncingSettings = _syncing.loadSettings();
 
                 // Check storage provider and call appropriate upload method
                 if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
                 {
                     console.log("[DEBUG] Utilizzo storage provider: Google Drive");
-                    // Use Google Drive
-                    if (!syncingSettings.google_client_id || !syncingSettings.google_client_secret)
-                    {
-                        // Show error for missing Google Drive credentials
-                        throw new Error(localize("error.missing.google.credentials"));
-                    }
-
+                    // Utilizziamo sempre Google Drive
                     const googleDriveClient = _syncing.getGoogleDriveClient();
 
-                    // Check if we have a refresh token, if not, initiate the auth flow
+                    // Verifica se abbiamo un refresh token, se no, inizia il flusso di autenticazione
                     if (!syncingSettings.google_refresh_token)
                     {
                         await googleDriveClient.authenticate();
@@ -137,7 +151,7 @@ function _initCommands(context: ExtensionContext)
                     {
                         try
                         {
-                            // Mostra la lista delle cartelle disponibili (con true per upload)
+                            // Mostra la lista delle cartelle disponibili
                             const folderId = await Toast.showGoogleDriveFolderListBox(googleDriveClient, true);
                             if (folderId)
                             {
@@ -164,43 +178,7 @@ function _initCommands(context: ExtensionContext)
 
                     try
                     {
-                        // Verifica se le impostazioni locali sono più recenti di quelle remote
-                        console.log("[DEBUG] Verifica se le impostazioni locali sono più recenti delle remote");
-                        try
-                        {
-                            // Ottieni impostazioni remote per il confronto delle date
-                            console.log("[DEBUG] Recupero delle impostazioni remote per confronto date");
-                            const remoteSettings = await googleDriveClient.getFiles(false);
-
-                            // Ottieni la data di modifica locale
-                            const gistSetting = VSCodeSetting.create();
-                            const localLastModified = gistSetting.getLastModified(settings);
-
-                            // Ottieni la data di modifica remota
-                            const remoteLastModified = new Date(remoteSettings.updated_at).getTime();
-
-                            console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
-                            console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
-
-                            // Verifica se le impostazioni locali sono più recenti
-                            const shouldUpload = isAfter(localLastModified, remoteLastModified);
-                            console.log("[DEBUG] Le impostazioni locali sono più recenti:", shouldUpload);
-
-                            if (!shouldUpload)
-                            {
-                                console.log("[DEBUG] Le impostazioni locali non sono più recenti, annullamento upload");
-                                Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
-                                _isSynchronizing = false;
-                                return;
-                            }
-                        }
-                        catch (err)
-                        {
-                            // In caso di errore nel confronto, log e continua con l'upload
-                            console.log("[DEBUG] Errore durante il confronto delle date, procedo con l'upload:", err);
-                        }
-
-                        // Pass the filtered settings directly to uploadSettings
+                        // Carica le impostazioni su Google Drive
                         const storage = await googleDriveClient.uploadSettings(filteredSettings, true);
 
                         // Salviamo solo l'ID della cartella nelle impostazioni di Syncing
@@ -209,6 +187,21 @@ function _initCommands(context: ExtensionContext)
                             syncingSettings.id = storage.id;
                             await _syncing.saveSettings(syncingSettings);
                         }
+
+                        // Aggiorna il SyncTracker con i contenuti caricati
+                        const uploadedFiles: Record<string, string | Buffer> = {};
+                        for (const setting of filteredSettings)
+                        {
+                            if (setting.content && setting.remoteFilename)
+                            {
+                                uploadedFiles[setting.remoteFilename] = setting.content;
+                            }
+                        }
+
+                        // Aggiorna lo stato di sincronizzazione
+                        const uploadSyncTracker = SyncTracker.create();
+                        uploadSyncTracker.updateSyncState(uploadedFiles);
+                        console.log("[DEBUG] SyncTracker: Stato aggiornato dopo upload completato");
 
                         Toast.statusInfo(localize("toast.settings.uploaded"));
 
@@ -259,92 +252,11 @@ function _initCommands(context: ExtensionContext)
                 }
                 else
                 {
-                    console.log("[DEBUG] Utilizzo storage provider: GitHub Gist");
-                    // Fallback to Remote Storage
-                    const remoteStorageSettings = await _syncing.prepareUploadSettings(true);
-                    const remoteStorage = _syncing.getRemoteStorageClient();
-
-                    // 3-1. If it has a Storage ID, try to update it.
-                    if (remoteStorageSettings.id != null && remoteStorageSettings.id !== "")
-                    {
-                        // 3-1-1. Try get the remote storage.
-                        const existingStorage = await remoteStorage.exists(remoteStorageSettings.id);
-                        if (existingStorage)
-                        {
-                            // 3-1-2. If it exists, update it.
-                            await remoteStorage.findAndUpdate(remoteStorageSettings.id, settings, true, true);
-                        }
-                        else
-                        {
-                            // 3-1-3. If it doesn't exist, create a new one.
-                            const newStorage = await remoteStorage.createSettings(settings);
-
-                            // Save to Syncing's settings.
-                            remoteStorageSettings.id = newStorage.id;
-                            await _syncing.saveSettings(remoteStorageSettings);
-                        }
-                    }
-                    else
-                    {
-                        // 3-2. If no Storage ID, create a new one.
-                        const newStorage = await remoteStorage.createSettings(settings);
-
-                        // Save to Syncing's settings.
-                        remoteStorageSettings.id = newStorage.id;
-                        await _syncing.saveSettings(remoteStorageSettings);
-                    }
-
-                    Toast.statusInfo(localize("toast.settings.uploaded"));
-                }
-
-                // Aggiorna il timestamp dell'ultimo upload manuale
-                console.log("[DEBUG] Aggiornamento del timestamp dell'ultimo upload");
-                _autoSyncService.updateLastUploadTime();
-            }
-            catch (err: any)
-            {
-                console.log("[DEBUG] Errore durante l'upload:", err);
-                console.error("Syncing:", err);
-                Toast.statusError(err.message);
-            }
-            finally
-            {
-                console.log("[DEBUG] Fine dell'operazione di upload, reset di _isSynchronizing");
-                _isSynchronizing = false;
-            }
-        })
-    );
-
-    // Register download command.
-    context.subscriptions.push(
-        registerCommand(context, "syncing.downloadSettings", async () =>
-        {
-            if (!_isReady || _isSynchronizing)
-            {
-                return;
-            }
-
-            try
-            {
-                _isSynchronizing = true;
-
-                // Set the last requested operation
-                _syncing.setLastRequestedOperation("download");
-
-                // Show starting download toast
-                Toast.statusInfo(localize("toast.settings.downloading"));
-
-                const syncingSettings = _syncing.loadSettings();
-                let remoteSettings;
-                let shouldDownload = true; // Default a true se non possiamo controllare
-
-                // Check storage provider and call appropriate download method
-                if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
-                {
-                    // Use Google Drive
+                    console.log("[DEBUG] Utilizzo storage provider: Google Drive");
+                    // Utilizziamo sempre Google Drive
                     const googleDriveClient = _syncing.getGoogleDriveClient();
 
-                    // Check if we have a refresh token, if not, initiate the auth flow
+                    // Verifica se abbiamo un refresh token, se no, inizia il flusso di autenticazione
                     if (!syncingSettings.google_refresh_token)
                     {
                         await googleDriveClient.authenticate();
@@ -398,14 +310,147 @@ function _initCommands(context: ExtensionContext)
                     try
                     {
                         console.log("[DEBUG] Recupero delle impostazioni remote da Google Drive");
-                        remoteSettings = await googleDriveClient.getFiles(true);
+                        const downloadedRemoteSettings = await googleDriveClient.getFiles(true);
+
+                        // 2. Download settings.
+                        const syncedItems = await _vscodeSetting.saveSettings(downloadedRemoteSettings, true);
+
+                        Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+
+                        // 3. Restart window (after "synced").
+                        await _showRestartPrompt();
+                    }
+                    catch (err)
+                    {
+                        // Controllo se l'errore è un "invalid_grant" e richiedi nuova autenticazione
+                        if (err.message && (err.message.includes("invalid_grant") || err.code === 401))
+                        {
+                            // Il token è scaduto o non valido, rimuoverlo e richiedere l'autenticazione
+                            syncingSettings.google_refresh_token = "";
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio all'utente
+                            Toast.statusInfo(localize("toast.google.auth.token.expired"));
+
+                            try
+                            {
+                                // Riavvia l'autenticazione
+                                const refreshGoogleDrive = _syncing.getGoogleDriveClient();
+                                await refreshGoogleDrive.authenticate();
+
+                                // Salva il nuovo token
+                                if (refreshGoogleDrive.refreshToken)
+                                {
+                                    syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
+                                    await _syncing.saveSettings(syncingSettings);
+                                    Toast.statusInfo(localize("toast.google.auth.success"));
+
+                                    // La ripresa automatica dell'operazione viene gestita da GoogleDrive.authenticate()
+                                }
+                            }
+                            catch (authErr)
+                            {
+                                console.error("Authentication error:", authErr);
+                                Toast.statusError(localize("toast.google.auth.failed", authErr.message));
+                            }
+
+                            // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                            // dell'operazione dal metodo authenticate() di GoogleDrive
+                            _isSynchronizing = false;
+                            return;
+                        }
+                        throw err; // Rilancia l'errore se non è un problema di token
+                    }
+                }
+
+                // Aggiorna il timestamp dell'ultimo upload manuale
+                console.log("[DEBUG] Aggiornamento del timestamp dell'ultimo upload");
+                _autoSyncService.updateLastUploadTime();
+            }
+            catch (err: any)
+            {
+                console.log("[DEBUG] Errore durante l'upload:", err);
+                console.error("Syncing:", err);
+                Toast.statusError(err.message);
+            }
+            finally
+            {
+                console.log("[DEBUG] Fine dell'operazione di upload, reset di _isSynchronizing");
+                _isSynchronizing = false;
+            }
+        })
+    );
+
+    // Register download command.
+    context.subscriptions.push(
+        registerCommand(context, "syncing.downloadSettings", async () =>
+        {
+            if (!_isReady || _isSynchronizing)
+            {
+                console.log(`[DEBUG] Download non avviato: _isReady=${_isReady}, _isSynchronizing=${_isSynchronizing}`);
+                return;
+            }
+
+            try
+            {
+                _isSynchronizing = true;
+
+                // Set the last requested operation
+                _syncing.setLastRequestedOperation("download");
+
+                // Show starting download toast
+                Toast.statusInfo(localize("toast.settings.downloading"));
+
+                const syncingSettings = _syncing.loadSettings();
+                let shouldDownload = true; // Default a true se non possiamo controllare
+
+                // Check storage provider and call appropriate download method
+                if (syncingSettings.storage_provider === StorageProvider.GoogleDrive)
+                {
+                    // Use Google Drive
+                    const googleDriveClient = _syncing.getGoogleDriveClient();
+
+                    // Check if we have a refresh token, if not, initiate the auth flow
+                    if (!syncingSettings.google_refresh_token)
+                    {
+                        await googleDriveClient.authenticate();
+
+                        // Dopo l'autenticazione, salvare il refresh token nelle impostazioni
+                        if (googleDriveClient.refreshToken)
+                        {
+                            syncingSettings.google_refresh_token = googleDriveClient.refreshToken;
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio di successo all'utente
+                            Toast.statusInfo(localize("toast.google.auth.success"));
+                        }
+
+                        // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                        // dell'operazione dal metodo authenticate() di GoogleDrive
+                        _isSynchronizing = false;
+                        return;
+                    }
+
+                    try
+                    {
+                        console.log("[DEBUG] Recupero delle impostazioni remote da Google Drive");
+                        const downloadedRemoteSettings = await googleDriveClient.getFiles(true);
+
+                        // Prima gestione del file di tracking, se presente
+                        const syncTracker = SyncTracker.create();
+                        if (downloadedRemoteSettings.files && downloadedRemoteSettings.files[syncTracker.remoteFilename])
+                        {
+                            console.log("[DEBUG] Trovato file di tracking remoto");
+                            // Aggiorna lo stato locale con il contenuto remoto
+                            syncTracker.updateFromRemote(downloadedRemoteSettings.files[syncTracker.remoteFilename].content);
+                        }
 
                         // Verifica se le impostazioni remote sono più recenti di quelle locali
                         console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
                         const gistSetting = VSCodeSetting.create();
                         const localSettings = await gistSetting.getSettings();
                         const localLastModified = gistSetting.getLastModified(localSettings);
-                        const remoteLastModified = new Date(remoteSettings.updated_at).getTime();
+                        const remoteLastModified = new Date(downloadedRemoteSettings.updated_at).getTime();
 
                         console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
                         console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
@@ -421,7 +466,7 @@ function _initCommands(context: ExtensionContext)
                         }
 
                         // 2. Download settings.
-                        const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
+                        const syncedItems = await _vscodeSetting.saveSettings(downloadedRemoteSettings, true);
 
                         Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
 
@@ -472,40 +517,114 @@ function _initCommands(context: ExtensionContext)
                 }
                 else
                 {
-                    // Fallback to Remote Storage
-                    // 1. Get Remote Storage.
-                    const remoteStorageSettings = await _syncing.prepareDownloadSettings(true);
-                    const remoteStorage = _syncing.getRemoteStorageClient();
-                    console.log("[DEBUG] Recupero delle impostazioni remote da GitHub Gist");
-                    remoteSettings = await remoteStorage.get(remoteStorageSettings.id, true);
+                    // Utilizziamo sempre Google Drive
+                    const googleDriveClient = _syncing.getGoogleDriveClient();
 
-                    // Verifica se le impostazioni remote sono più recenti di quelle locali
-                    console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
-                    const gistSetting = VSCodeSetting.create();
-                    const localSettings = await gistSetting.getSettings();
-                    const localLastModified = gistSetting.getLastModified(localSettings);
-                    const remoteLastModified = new Date(remoteSettings.updated_at).getTime();
-
-                    console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
-                    console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
-
-                    shouldDownload = isAfter(remoteLastModified, localLastModified);
-                    console.log("[DEBUG] Le impostazioni remote sono più recenti:", shouldDownload);
-
-                    if (!shouldDownload)
+                    // Verifica se abbiamo un refresh token, se no, inizia il flusso di autenticazione
+                    if (!syncingSettings.google_refresh_token)
                     {
-                        Toast.statusInfo(localize("toast.settings.autoSync.nothingChanged"));
+                        await googleDriveClient.authenticate();
+
+                        // Dopo l'autenticazione, salvare il refresh token nelle impostazioni
+                        if (googleDriveClient.refreshToken)
+                        {
+                            syncingSettings.google_refresh_token = googleDriveClient.refreshToken;
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio di successo all'utente
+                            Toast.statusInfo(localize("toast.google.auth.success"));
+                        }
+
+                        // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                        // dell'operazione dal metodo authenticate() di GoogleDrive
                         _isSynchronizing = false;
                         return;
                     }
 
-                    // 2. Download settings.
-                    const syncedItems = await _vscodeSetting.saveSettings(remoteSettings, true);
+                    // Se non c'è l'ID della cartella, chiediamo all'utente di selezionarne una
+                    if (!syncingSettings.id)
+                    {
+                        try
+                        {
+                            // Mostra la lista delle cartelle disponibili
+                            const folderId = await Toast.showGoogleDriveFolderListBox(googleDriveClient, false);
+                            if (folderId)
+                            {
+                                // Salva l'ID nella configurazione
+                                syncingSettings.id = folderId;
+                                await _syncing.saveSettings(syncingSettings);
+                                Toast.statusInfo(localize("toast.google.folder.selected"));
+                            }
+                            else
+                            {
+                                throw new Error(localize("error.no.folder.id"));
+                            }
+                        }
+                        catch (err)
+                        {
+                            if (err.message === localize("error.abort.synchronization"))
+                            {
+                                _isSynchronizing = false;
+                                return;
+                            }
+                            throw err;
+                        }
+                    }
 
-                    Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+                    try
+                    {
+                        console.log("[DEBUG] Recupero delle impostazioni remote da Google Drive");
+                        const downloadedRemoteSettings = await googleDriveClient.getFiles(true);
 
-                    // 3. Restart window (after "synced").
-                    await _showRestartPrompt();
+                        // 2. Download settings.
+                        const syncedItems = await _vscodeSetting.saveSettings(downloadedRemoteSettings, true);
+
+                        Toast.statusInfo(_getSyncingCompleteMessage(syncedItems));
+
+                        // 3. Restart window (after "synced").
+                        await _showRestartPrompt();
+                    }
+                    catch (err)
+                    {
+                        // Controllo se l'errore è un "invalid_grant" e richiedi nuova autenticazione
+                        if (err.message && (err.message.includes("invalid_grant") || err.code === 401))
+                        {
+                            // Il token è scaduto o non valido, rimuoverlo e richiedere l'autenticazione
+                            syncingSettings.google_refresh_token = "";
+                            await _syncing.saveSettings(syncingSettings);
+
+                            // Mostra messaggio all'utente
+                            Toast.statusInfo(localize("toast.google.auth.token.expired"));
+
+                            try
+                            {
+                                // Riavvia l'autenticazione
+                                const refreshGoogleDrive = _syncing.getGoogleDriveClient();
+                                await refreshGoogleDrive.authenticate();
+
+                                // Salva il nuovo token
+                                if (refreshGoogleDrive.refreshToken)
+                                {
+                                    syncingSettings.google_refresh_token = refreshGoogleDrive.refreshToken;
+                                    await _syncing.saveSettings(syncingSettings);
+                                    Toast.statusInfo(localize("toast.google.auth.success"));
+
+                                    // La ripresa automatica dell'operazione viene gestita da GoogleDrive.authenticate()
+                                }
+                            }
+                            catch (authErr)
+                            {
+                                console.error("Authentication error:", authErr);
+                                Toast.statusError(localize("toast.google.auth.failed", authErr.message));
+                            }
+
+                            // IMPORTANTE: imposta _isSynchronizing a false per permettere la ripresa automatica
+                            // dell'operazione dal metodo authenticate() di GoogleDrive
+                            _isSynchronizing = false;
+                            return;
+                        }
+                        throw err; // Rilancia l'errore se non è un problema di token
+                    }
                 }
             }
             catch (err: any)
@@ -688,6 +807,7 @@ function _initSyncing(context: ExtensionContext)
     Toast.statusInfo(localize("toast.initializing"));
 
     // Create instances using the static factory methods without arguments
+    _env = Environment.create();
     _syncing = Syncing.create();
     _vscodeSetting = VSCodeSetting.create();
 

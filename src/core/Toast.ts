@@ -3,22 +3,8 @@
  */
 
 import * as vscode from "vscode";
-
-import { formatDistance } from "../utils/date";
-import { locale, localize } from "../i18n";
+import { localize } from "../i18n";
 import { restartWindow } from "../utils/vscodeAPI";
-import type { Gist } from "./Gist";
-
-/**
- * Represents the item of RemoteStorageListBox.
- */
-interface IRemoteStorageListBoxItem extends vscode.QuickPickItem
-{
-    /**
-     * The payload of the item.
-     */
-    data: string;
-}
 
 /**
  * Displays a message to the VSCode status bar.
@@ -72,133 +58,7 @@ export function statusFatal(message: string): void
 }
 
 /**
- * Shows the Personal Access Token input box.
- *
- * @param forUpload Whether to show messages for upload. Defaults to `true`.
- */
-export async function showGitHubTokenInputBox(forUpload: boolean = true): Promise<string>
-{
-    const placeHolder = forUpload
-        ? localize("toast.box.enter.github.token.upload")
-        : localize("toast.box.enter.github.token.download");
-    const options = {
-        ignoreFocusOut: true,
-        password: false,
-        placeHolder,
-        prompt: localize("toast.box.enter.github.token.description")
-    };
-    const value = await vscode.window.showInputBox(options);
-    if (value === undefined)
-    {
-        // Cancelled.
-        throw new Error(localize("error.abort.synchronization"));
-    }
-    else
-    {
-        const token = value.trim();
-        if (!token && forUpload)
-        {
-            // Only throw when it's uploading.
-            throw new Error(localize("error.no.github.token"));
-        }
-        return token;
-    }
-}
-
-/**
- * Shows the Remote Storage ID input box.
- *
- * @param forUpload Whether to show messages for upload. Defaults to `true`.
- */
-export async function showStorageInputBox(forUpload: boolean = true): Promise<string>
-{
-    const placeHolder = forUpload
-        ? localize("toast.box.enter.gist.id.upload")
-        : localize("toast.box.enter.gist.id.download");
-    const value = await vscode.window.showInputBox({
-        ignoreFocusOut: true,
-        password: false,
-        placeHolder,
-        prompt: localize("toast.box.enter.gist.id.description")
-    });
-    if (value === undefined)
-    {
-        // Cancelled.
-        throw new Error(localize("error.abort.synchronization"));
-    }
-    else
-    {
-        const id = value.trim();
-        if (!id && !forUpload)
-        {
-            // Only throw when it's downloading.
-            throw new Error(localize("error.no.gist.id"));
-        }
-        return id;
-    }
-}
-
-/**
- * Shows the remote storage list box.
- *
- * @param api Remote Storage utils.
- * @param forUpload Whether to show messages for upload. Defaults to `true`.
- */
-export async function showRemoteStorageListBox(api: Gist, forUpload: boolean = true): Promise<string>
-{
-    showSpinner(localize("toast.settings.checking.remote.gists"));
-    const storages = await api.getAll();
-    clearSpinner("");
-
-    const manualItem: IRemoteStorageListBoxItem = {
-        data: "@@manual",
-        description: "",
-        label: localize("toast.box.enter.gist.id.manually")
-    };
-
-    let item: IRemoteStorageListBoxItem | undefined = manualItem;
-    // Show quick pick dialog only if the storages list is not empty.
-    if (storages.length > 0)
-    {
-        const items: IRemoteStorageListBoxItem[] = storages.map((storage) => ({
-            data: storage.id,
-            description: localize(
-                "toast.box.gist.last.uploaded",
-                formatDistance(new Date(storage.updated_at), new Date(), locale())
-            ),
-            label: `Storage ID: ${storage.id}`
-        }));
-        items.unshift(manualItem);
-        item = await vscode.window.showQuickPick(items, {
-            ignoreFocusOut: true,
-            matchOnDescription: true,
-            placeHolder: forUpload
-                ? localize("toast.box.choose.gist.upload")
-                : localize("toast.box.choose.gist.download")
-        });
-    }
-
-    if (item === undefined)
-    {
-        // Cancelled.
-        throw new Error(localize("error.abort.synchronization"));
-    }
-    else
-    {
-        const { data: id } = item;
-        if (id === "@@manual")
-        {
-            return "";
-        }
-        else
-        {
-            return id;
-        }
-    }
-}
-
-/**
- * Shows a `Restart VSCode` prompt dialog.
+ * Shows the restart box.
  */
 export function showRestartBox(): void
 {
@@ -246,6 +106,13 @@ const spinner = {
 export function showSpinner(message: string, progress?: number, total?: number): void
 {
     clearSpinner();
+
+    // Verifica se è un messaggio di autenticazione per Google Drive
+    if (message.includes("Google Drive") && message.includes("autenticazione"))
+    {
+        // Per i messaggi di autenticazione, mostra un messaggio più evidente
+        vscode.window.showInformationMessage(`🔄 ${message}`, { modal: false });
+    }
 
     let text = "";
     if (progress != null && total != null)
