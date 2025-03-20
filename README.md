@@ -98,7 +98,6 @@ You can find the following `Syncing Settings` in your `VSCode User Settings`.
 
     Note that the excluded `extension name` is actually the `extension id` (you can find it in the `VSCode Extensions View`), such as:
 
-    ![exclude extensions](docs/png/Exclude-Extensions.png)
 
     Now the extension `nonoroazoro.syncing` (i.e., `Syncing`) and all the extensions of the author `somepublisher` will no longer be synchronized.
 
@@ -180,15 +179,11 @@ You can now let Syncing auto-sync your settings. Here are the steps:
 
 ## Storage Providers
 
-Syncing supports multiple storage providers for synchronizing your VSCode settings:
+Syncing uses Google Drive for synchronizing your VSCode settings.
 
 ### Google Drive
 
-This is the default storage provider, which synchronizes your settings using Google Drive.
-
-### Google Drive
-
-As an alternative, you can use Google Drive to store your settings. To set up Google Drive:
+Google Drive is the storage provider used to synchronize your settings. To set up Google Drive:
 
 1. Create a Google Cloud project and enable the Google Drive API
 2. Create OAuth credentials (Web application type)
@@ -198,17 +193,15 @@ As an alternative, you can use Google Drive to store your settings. To set up Go
 ```json
 {
     "storage_provider": "google_drive",
-    "google_client_id": "YOUR_CLIENT_ID",
-    "google_client_secret": "YOUR_CLIENT_SECRET",
     "google_refresh_token": "YOUR_REFRESH_TOKEN",
     "auto_sync": true
 }
 ```
 
 To obtain a refresh token, you'll need to:
-1. Use your client ID to generate an authorization URL
-2. Open the URL in a browser and authorize the application
-3. Copy the authorization code and exchange it for a refresh token
+1. Use the built-in authentication flow when using the extension
+2. Open the provided URL in a browser and authorize the application
+3. Copy the authorization code and enter it in VSCode when prompted
 
 ## Getting Started
 

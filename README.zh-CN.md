@@ -182,6 +182,33 @@ Syncing 现在支持配置自动同步了，具体步骤如下：
 1. 重新加载或重启 VSCode。
 
 
+## 存储提供商
+
+Syncing 使用 Google Drive 来同步您的 VSCode 设置。
+
+### Google Drive
+
+Google Drive 是用于同步您设置的存储提供商。要设置 Google Drive：
+
+1. 创建 Google Cloud 项目并启用 Google Drive API
+2. 创建 OAuth 凭据（Web 应用程序类型）
+3. 在 `VSCode 命令面板`中输入 `"Syncing: Open Syncing Settings"` 打开 `Syncing` 的设置文件
+4. 按如下方式配置 Google Drive：
+
+```json
+{
+    "storage_provider": "google_drive",
+    "google_refresh_token": "您的刷新令牌",
+    "auto_sync": true
+}
+```
+
+要获取刷新令牌，您需要：
+1. 使用扩展内置的身份验证流程
+2. 在浏览器中打开提供的 URL 并授权应用程序
+3. 复制授权代码并在 VSCode 提示时输入
+
+
 ## 快速开始
 
 1. 创建您自己的 `Google Drive 凭据`（总共 3 步）：

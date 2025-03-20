@@ -10,7 +10,7 @@
         "name": "Davide Ladisa",
         "url": "https://github.com/FrancoStino"
     },
-    "homepage": "https://github.com/FrancoStino/vscode-syncing",
+    "homepage": "https://github.com/FrancoStino/vscode-syncing-all",
     "license": "(MIT AND 996ICU)",
     "main": "dist/extension",
     "icon": "resources/logo.webp",
