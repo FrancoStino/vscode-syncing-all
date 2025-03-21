@@ -28,8 +28,7 @@ import { SyncTracker } from "./SyncTracker";
 /**
  * `VSCode Settings` wrapper.
  */
-export class VSCodeSetting
-{
+export class VSCodeSetting {
     private static _instance: VSCodeSetting;
 
     /**
@@ -45,8 +44,7 @@ export class VSCodeSetting
     private _env: Environment;
     private _ext: Extension;
 
-    private constructor()
-    {
+    private constructor() {
         this._env = Environment.create();
         this._ext = Extension.create();
     }
@@ -54,10 +52,8 @@ export class VSCodeSetting
     /**
      * Creates an instance of singleton class `VSCodeSetting`.
      */
-    public static create(): VSCodeSetting
-    {
-        if (!VSCodeSetting._instance)
-        {
+    public static create(): VSCodeSetting {
+        if (!VSCodeSetting._instance) {
             VSCodeSetting._instance = new VSCodeSetting();
         }
         return VSCodeSetting._instance;
@@ -88,10 +84,8 @@ export class VSCodeSetting
         loadFileContent: boolean = false,
         showIndicator: boolean = false,
         settingsList: SettingType[] = VSCODE_SETTINGS_LIST
-    ): Promise<ISetting[]>
-    {
-        if (showIndicator)
-        {
+    ): Promise<ISetting[]> {
+        if (showIndicator) {
             Toast.showSpinner(localize("toast.settings.gathering.local"));
         }
 
@@ -100,15 +94,12 @@ export class VSCodeSetting
         let remoteFilename: string;
         let tempSettings: ISetting[];
 
-        for (const settingType of settingsList)
-        {
-            if (settingType === SettingType.Snippets)
-            {
+        for (const settingType of settingsList) {
+            if (settingType === SettingType.Snippets) {
                 // Attention: Snippets may be empty.
                 tempSettings = await this._getSnippets(this._env.snippetsDirectory);
             }
-            else if (settingType === SettingType.StateDB)
-            {
+            else if (settingType === SettingType.StateDB) {
                 // Handle state.vscdb file
                 localFilename = "state.vscdb";
                 remoteFilename = localFilename;
@@ -118,19 +109,16 @@ export class VSCodeSetting
                     type: settingType
                 }];
             }
-            else
-            {
+            else {
                 localFilename = `${settingType}.json`;
                 remoteFilename = localFilename;
-                if (settingType === SettingType.Keybindings)
-                {
+                if (settingType === SettingType.Keybindings) {
                     // Separate the keybindings.
                     const separateKeybindings = getVSCodeSetting<boolean>(
                         CONFIGURATION_KEY,
                         CONFIGURATION_SEPARATE_KEYBINDINGS
                     );
-                    if (separateKeybindings && this._env.isMac)
-                    {
+                    if (separateKeybindings && this._env.isMac) {
                         remoteFilename = `${settingType}${VSCodeSetting._MAC_SUFFIX}.json`;
                     }
                 }
@@ -146,33 +134,27 @@ export class VSCodeSetting
             results.push(...tempSettings);
         }
 
-        if (loadFileContent)
-        {
+        if (loadFileContent) {
             const contents = await this._loadContent(results);
 
             const errorFiles: string[] = [];
             results = [];
-            contents.forEach((value: ISetting) =>
-            {
+            contents.forEach((value: ISetting) => {
                 // Success if the content is not `null`.
-                if (value.content != null)
-                {
+                if (value.content != null) {
                     results.push(value);
                 }
-                else
-                {
+                else {
                     errorFiles.push(value.localFilePath);
                 }
             });
 
-            if (errorFiles.length > 0)
-            {
+            if (errorFiles.length > 0) {
                 console.error(localize("error.invalid.settings", errorFiles.join("\r\n")));
             }
         }
 
-        if (showIndicator)
-        {
+        if (showIndicator) {
             Toast.clearSpinner("");
         }
         return results;
@@ -183,8 +165,7 @@ export class VSCodeSetting
      *
      * @param {ISetting[]} vscodeSettings VSCode settings.
      */
-    public getLastModified(vscodeSettings: ISetting[]): number
-    {
+    public getLastModified(vscodeSettings: ISetting[]): number {
         return Math.max.apply(
             null,
             vscodeSettings
@@ -202,18 +183,14 @@ export class VSCodeSetting
     public async saveSettings(remoteStorage: IRemoteStorage, showIndicator: boolean = false): Promise<{
         updated: ISyncedItem[];
         removed: ISyncedItem[];
-    }>
-    {
-        if (showIndicator)
-        {
+    }> {
+        if (showIndicator) {
             Toast.showSpinner(localize("toast.settings.downloading"));
         }
 
-        try
-        {
+        try {
             const { files, updated_at: lastModified } = remoteStorage;
-            if (files)
-            {
+            if (files) {
                 const existsFileKeys: string[] = [];
                 const settingsToRemove: ISetting[] = [];
                 const settingsToSave: ISetting[] = [];
@@ -221,22 +198,18 @@ export class VSCodeSetting
                 let remoteFile: IRemoteFile;
 
                 const settings = await this.getSettings();
-                for (const setting of settings)
-                {
+                for (const setting of settings) {
                     remoteFile = files[setting.remoteFilename];
-                    if (remoteFile)
-                    {
+                    if (remoteFile) {
                         // If the file exists in both remote and local, it should be synchronized.
-                        if (setting.type === SettingType.Extensions)
-                        {
+                        if (setting.type === SettingType.Extensions) {
                             // Temp extensions file.
                             extensionsSetting = {
                                 ...setting,
                                 content: remoteFile.content
                             };
                         }
-                        else
-                        {
+                        else {
                             // Temp other file.
                             settingsToSave.push({
                                 ...setting,
@@ -245,29 +218,23 @@ export class VSCodeSetting
                         }
                         existsFileKeys.push(setting.remoteFilename);
                     }
-                    else
-                    {
+                    else {
                         // File exists in local but not remote.
                         // Delete if it's a snippet file.
-                        if (setting.type === SettingType.Snippets)
-                        {
+                        if (setting.type === SettingType.Snippets) {
                             settingsToRemove.push(setting);
                         }
                     }
                 }
 
                 let filename: string;
-                for (const key of Object.keys(files))
-                {
-                    if (!existsFileKeys.includes(key))
-                    {
+                for (const key of Object.keys(files)) {
+                    if (!existsFileKeys.includes(key)) {
                         remoteFile = files[key];
-                        if (remoteFile.filename.startsWith(VSCodeSetting._SNIPPET_PREFIX))
-                        {
+                        if (remoteFile.filename.startsWith(VSCodeSetting._SNIPPET_PREFIX)) {
                             // Snippets.
                             filename = remoteFile.filename.slice(VSCodeSetting._SNIPPET_PREFIX.length);
-                            if (filename)
-                            {
+                            if (filename) {
                                 settingsToSave.push({
                                     content: remoteFile.content,
                                     localFilePath: this._env.getSnippetFilePath(filename),
@@ -276,38 +243,32 @@ export class VSCodeSetting
                                 });
                             }
                         }
-                        else
-                        {
+                        else {
                             // Unknown files, don't care.
                         }
                     }
                 }
 
                 // Put extensions file to the last.
-                if (extensionsSetting)
-                {
+                if (extensionsSetting) {
                     settingsToSave.push(extensionsSetting);
                 }
 
                 // poka-yoke - Determines whether there're too much changes since the last downloading.
                 const value = await this._shouldContinue(settings, settingsToSave, settingsToRemove);
-                if (value)
-                {
+                if (value) {
                     const syncedItems: {
                         updated: ISyncedItem[];
                         removed: ISyncedItem[];
                     } = { updated: [], removed: [] };
 
                     // Save settings.
-                    for (const setting of settingsToSave)
-                    {
-                        try
-                        {
+                    for (const setting of settingsToSave) {
+                        try {
                             const saved = await this._saveSetting(setting, lastModified);
                             syncedItems.updated.push(saved);
                         }
-                        catch (error: any)
-                        {
+                        catch (error: any) {
                             throw new Error(localize("error.save.file", setting.remoteFilename, error.message));
                         }
                     }
@@ -318,10 +279,8 @@ export class VSCodeSetting
 
                     // Dopo aver completato il download con successo, aggiorna il SyncTracker
                     const downloadedFiles: Record<string, string | Buffer> = {};
-                    for (const setting of settingsToSave)
-                    {
-                        if (setting.content && setting.remoteFilename)
-                        {
+                    for (const setting of settingsToSave) {
+                        if (setting.content && setting.remoteFilename) {
                             downloadedFiles[setting.remoteFilename] = setting.content;
                         }
                     }
@@ -331,26 +290,21 @@ export class VSCodeSetting
                     syncTracker.updateSyncState(downloadedFiles);
                     console.log("[DEBUG] SyncTracker: Stato aggiornato dopo download completato");
 
-                    if (showIndicator)
-                    {
+                    if (showIndicator) {
                         Toast.clearSpinner("");
                     }
                     return syncedItems;
                 }
-                else
-                {
+                else {
                     throw new Error(localize("error.abort.synchronization"));
                 }
             }
-            else
-            {
+            else {
                 throw new Error(localize("error.files.notfound"));
             }
         }
-        catch (error: any)
-        {
-            if (showIndicator)
-            {
+        catch (error: any) {
+            if (showIndicator) {
                 Toast.statusError(localize("toast.settings.downloading.failed", error.message));
             }
             throw error;
@@ -363,14 +317,11 @@ export class VSCodeSetting
      * @param {ISetting} setting The `VSCodeSetting`.
      * @param {(Date | number | string)} lastModified The last modified time.
      */
-    public async saveLastModifiedTime(setting: ISetting, lastModified: Date | number | string)
-    {
-        if (setting.type === SettingType.Extensions)
-        {
+    public async saveLastModifiedTime(setting: ISetting, lastModified: Date | number | string) {
+        if (setting.type === SettingType.Extensions) {
             await writeLastModified(this._env.extensionsDirectory, lastModified);
         }
-        else
-        {
+        else {
             await writeLastModified(setting.localFilePath, lastModified);
         }
     }
@@ -380,18 +331,14 @@ export class VSCodeSetting
      *
      * @param settings `VSCode Settings`.
      */
-    public async removeSettings(settings: ISetting[]): Promise<ISyncedItem[]>
-    {
+    public async removeSettings(settings: ISetting[]): Promise<ISyncedItem[]> {
         const removed: ISyncedItem[] = [];
-        for (const setting of settings)
-        {
-            try
-            {
+        for (const setting of settings) {
+            try {
                 await fs.remove(setting.localFilePath);
                 removed.push({ setting });
             }
-            catch (error: any)
-            {
+            catch (error: any) {
                 throw new Error(localize("error.remove.file", setting.remoteFilename, error.message));
             }
         }
@@ -405,20 +352,16 @@ export class VSCodeSetting
      * @param showIndicator Whether to show progress indicators
      * @returns Array of synced items with status
      */
-    public async syncSettings(remoteSettings: Record<string, any>, showIndicator: boolean = false): Promise<ISyncedItem[]>
-    {
+    public async syncSettings(remoteSettings: Record<string, any>, showIndicator: boolean = false): Promise<ISyncedItem[]> {
         const syncedItems: ISyncedItem[] = [];
 
-        try
-        {
-            if (showIndicator)
-            {
+        try {
+            if (showIndicator) {
                 Toast.showSpinner(localize("toast.settings.downloading"));
             }
 
             // Iterate through each setting property in a type-safe way
-            if (remoteSettings.extensions)
-            {
+            if (remoteSettings.extensions) {
                 syncedItems.push({
                     name: "extensions",
                     synced: true,
@@ -430,8 +373,7 @@ export class VSCodeSetting
                 });
             }
 
-            if (remoteSettings.settings)
-            {
+            if (remoteSettings.settings) {
                 syncedItems.push({
                     name: "settings",
                     synced: true,
@@ -443,8 +385,7 @@ export class VSCodeSetting
                 });
             }
 
-            if (remoteSettings.keybindings)
-            {
+            if (remoteSettings.keybindings) {
                 syncedItems.push({
                     name: "keybindings",
                     synced: true,
@@ -456,8 +397,7 @@ export class VSCodeSetting
                 });
             }
 
-            if (remoteSettings.snippets)
-            {
+            if (remoteSettings.snippets) {
                 syncedItems.push({
                     name: "snippets",
                     synced: true,
@@ -469,17 +409,14 @@ export class VSCodeSetting
                 });
             }
 
-            if (showIndicator)
-            {
+            if (showIndicator) {
                 Toast.clearSpinner("");
             }
 
             return syncedItems;
         }
-        catch (err: any)
-        {
-            if (showIndicator)
-            {
+        catch (err: any) {
+            if (showIndicator) {
                 Toast.statusError(localize("toast.settings.downloading.failed", err.message));
             }
             throw err;
@@ -491,14 +428,11 @@ export class VSCodeSetting
      *
      * @param snippetsDir Snippets dir.
      */
-    private async _getSnippets(snippetsDir: string): Promise<ISetting[]>
-    {
+    private async _getSnippets(snippetsDir: string): Promise<ISetting[]> {
         const results: ISetting[] = [];
-        try
-        {
+        try {
             const filenames = await fs.readdir(snippetsDir);
-            filenames.filter(junk.not).forEach((filename: string) =>
-            {
+            filenames.filter(junk.not).forEach((filename: string) => {
                 // Add prefix to all snippets.
                 results.push({
                     localFilePath: path.join(snippetsDir, filename),
@@ -507,8 +441,7 @@ export class VSCodeSetting
                 });
             });
         }
-        catch
-        {
+        catch {
             console.error(localize("error.loading.snippets"));
         }
         return results;
@@ -520,21 +453,16 @@ export class VSCodeSetting
      * @param settings `VSCode Settings`.
      * @param exclude Default is `true`, exclude some `VSCode Settings` base on the exclude list of `Syncing`.
      */
-    private async _loadContent(settings: ISetting[], exclude: boolean = true): Promise<ISetting[]>
-    {
+    private async _loadContent(settings: ISetting[], exclude: boolean = true): Promise<ISetting[]> {
         const result: ISetting[] = [];
-        for (const setting of settings)
-        {
+        for (const setting of settings) {
             let content: string | undefined;
             let lastModified: number | undefined;
-            try
-            {
-                if (setting.type === SettingType.Extensions)
-                {
+            try {
+                if (setting.type === SettingType.Extensions) {
                     // Exclude extensions.
                     let extensions = this._ext.getAll();
-                    if (exclude && extensions.length > 0)
-                    {
+                    if (exclude && extensions.length > 0) {
                         const patterns = getVSCodeSetting<string[]>(
                             CONFIGURATION_KEY,
                             CONFIGURATION_EXCLUDED_EXTENSIONS
@@ -545,53 +473,43 @@ export class VSCodeSetting
 
                     lastModified = await readLastModified(this._env.extensionsDirectory);
                 }
-                else if (setting.type === SettingType.StateDB)
-                {
+                else if (setting.type === SettingType.StateDB) {
                     // Handle state.vscdb as binary file
-                    try
-                    {
+                    try {
                         // Check if file exists
-                        if (fs.existsSync(setting.localFilePath))
-                        {
-                            try
-                            {
+                        if (fs.existsSync(setting.localFilePath)) {
+                            try {
                                 content = await fs.readFile(setting.localFilePath, "base64");
                                 console.log(`Successfully read state.vscdb from ${setting.localFilePath}`);
 
                                 // Validate that the content is not empty
-                                if (!content || content.trim() === "")
-                                {
+                                if (!content || content.trim() === "") {
                                     console.warn(`Read empty content from state.vscdb at ${setting.localFilePath}`);
                                 }
                             }
-                            catch (readErr)
-                            {
+                            catch (readErr) {
                                 console.error(`Error reading state.vscdb as base64: ${readErr.message}`);
                                 console.error("Stack trace:", readErr.stack);
 
                                 // Try reading as a buffer directly
-                                try
-                                {
+                                try {
                                     const buffer = await fs.readFile(setting.localFilePath);
                                     content = buffer.toString("base64");
                                     console.log(`Successfully read state.vscdb as buffer from ${setting.localFilePath}`);
                                 }
-                                catch (bufferErr)
-                                {
+                                catch (bufferErr) {
                                     console.error(`Error reading state.vscdb as buffer: ${bufferErr.message}`);
                                     throw bufferErr; // Rethrow to be caught by outer catch
                                 }
                             }
                         }
-                        else
-                        {
+                        else {
                             console.warn(`state.vscdb file not found at ${setting.localFilePath}`);
                             // Return empty content but don't fail
                             content = "";
                         }
                     }
-                    catch (err)
-                    {
+                    catch (err) {
                         console.error(`Error reading state.vscdb: ${err.message}`);
                         console.error("Stack trace:", err.stack);
                         // Return empty content but don't fail
@@ -600,16 +518,13 @@ export class VSCodeSetting
 
                     lastModified = await readLastModified(setting.localFilePath);
                 }
-                else
-                {
+                else {
                     content = await fs.readFile(setting.localFilePath, "utf8");
 
                     // Exclude settings.
-                    if (exclude && content && setting.type === SettingType.Settings)
-                    {
+                    if (exclude && content && setting.type === SettingType.Settings) {
                         const settingsJSON = parse(content);
-                        if (settingsJSON)
-                        {
+                        if (settingsJSON) {
                             const patterns = getVSCodeSetting<string[]>(
                                 CONFIGURATION_KEY,
                                 CONFIGURATION_EXCLUDED_SETTINGS
@@ -621,8 +536,7 @@ export class VSCodeSetting
                     lastModified = await readLastModified(setting.localFilePath);
                 }
             }
-            catch (err: any)
-            {
+            catch (err: any) {
                 content = undefined;
                 console.error(localize("error.loading.settings", setting.remoteFilename, err));
             }
@@ -636,28 +550,27 @@ export class VSCodeSetting
      *
      * @param setting `VSCode Setting`.
      */
-    private async _saveSetting(setting: ISetting, lastModified: string): Promise<ISyncedItem>
-    {
+    private async _saveSetting(setting: ISetting, lastModified: string): Promise<ISyncedItem> {
         let result: ISyncedItem;
-        if (setting.type === SettingType.Extensions)
-        {
+        if (setting.type === SettingType.Extensions) {
             // Sync extensions.
             const extensions: IExtension[] = parse(setting.content ?? "[]");
             result = await this._ext.sync(extensions, true);
         }
-        else if (setting.type === SettingType.StateDB)
-        {
+        else if (setting.type === SettingType.StateDB) {
             // Save state.vscdb as binary file
-            if (setting.content)
-            {
-                try
-                {
+            if (setting.content) {
+                try {
                     // Ensure directory exists
                     await fs.ensureDir(path.dirname(setting.localFilePath));
+                    console.log(`Directory ensured for state.vscdb: ${path.dirname(setting.localFilePath)}`);
+
+                    // Log the file path for debugging
+                    console.log(`State.vscdb path: ${setting.localFilePath}`);
+                    console.log(`File exists before backup: ${fs.existsSync(setting.localFilePath)}`);
 
                     // Create a backup of the current file if it exists
-                    if (fs.existsSync(setting.localFilePath))
-                    {
+                    if (fs.existsSync(setting.localFilePath)) {
                         const backupPath = `${setting.localFilePath}.backup`;
                         await fs.copy(setting.localFilePath, backupPath);
                         console.log(`Created backup of state.vscdb at ${backupPath}`);
@@ -665,58 +578,90 @@ export class VSCodeSetting
 
                     // Safely check if content is a valid base64 string
                     let buffer;
-                    if (typeof setting.content !== "string")
-                    {
+                    if (typeof setting.content !== "string") {
                         console.error(`Invalid content type for state.vscdb: ${typeof setting.content}`);
                         throw new Error(`Expected string content for state.vscdb but got ${typeof setting.content}`);
                     }
 
-                    try
-                    {
+                    try {
                         // Check if the content is valid base64
                         const base64Regex = /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;
                         const isBase64 = base64Regex.test(setting.content.replace(/\s/g, ""));
 
-                        if (!isBase64)
-                        {
+                        if (!isBase64) {
                             console.warn("Content doesn't appear to be valid base64, attempting conversion anyway");
                         }
 
                         buffer = Buffer.from(setting.content, "base64");
                     }
-                    catch (err)
-                    {
+                    catch (err) {
                         console.error(`Error decoding base64 for state.vscdb: ${err.message}`);
                         throw new Error(`Invalid base64 content for state.vscdb: ${err.message}`);
                     }
 
-                    await fs.writeFile(setting.localFilePath, buffer);
-                    console.log(`Successfully saved state.vscdb to ${setting.localFilePath}`);
+                    // Write file with explicit overwrite
+                    try {
+                        // First try to remove the file if it exists
+                        if (fs.existsSync(setting.localFilePath)) {
+                            await fs.remove(setting.localFilePath);
+                            console.log(`Removed existing state.vscdb at ${setting.localFilePath}`);
+                        }
+
+                        // Write the file
+                        await fs.writeFile(setting.localFilePath, buffer);
+
+                        // Verify the file was written
+                        const fileExists = fs.existsSync(setting.localFilePath);
+                        const fileSize = fileExists ? (await fs.stat(setting.localFilePath)).size : 0;
+                        console.log(`Successfully saved state.vscdb to ${setting.localFilePath} (exists: ${fileExists}, size: ${fileSize} bytes)`);
+
+                        if (!fileExists || fileSize === 0) {
+                            throw new Error(`File was not written properly: exists=${fileExists}, size=${fileSize}`);
+                        }
+                    } catch (writeErr) {
+                        console.error(`Error writing state.vscdb: ${writeErr.message}`);
+                        throw writeErr;
+                    }
+
+                    // Remove the backup if everything succeeded
+                    const backupPath = `${setting.localFilePath}.backup`;
+                    if (fs.existsSync(backupPath)) {
+                        await fs.remove(backupPath);
+                        console.log(`Removed backup after successful save`);
+                    }
                 }
-                catch (err)
-                {
+                catch (err) {
                     console.error(`Error saving state.vscdb: ${err.message}`);
                     console.error("Stack trace:", err.stack);
+
+                    // Try to restore from backup if available
+                    const backupPath = `${setting.localFilePath}.backup`;
+                    if (fs.existsSync(backupPath)) {
+                        try {
+                            await fs.copy(backupPath, setting.localFilePath);
+                            console.log(`Restored state.vscdb from backup after error`);
+                            await fs.remove(backupPath);
+                        } catch (restoreErr) {
+                            console.error(`Failed to restore from backup: ${restoreErr.message}`);
+                        }
+                    }
+
                     // Continue execution even if we can't write the state.vscdb file
                     // This prevents the sync from failing completely
                 }
             }
-            else
-            {
+            else {
                 console.warn(`No content provided for state.vscdb, skipping file write`);
             }
             result = { setting };
         }
-        else
-        {
+        else {
             let settingsToSave = setting.content;
-            if (setting.type === SettingType.Settings && settingsToSave)
-            {
+            if (setting.type === SettingType.Settings && settingsToSave) {
                 // Sync settings.
                 const localFiles = await this._loadContent([setting], false);
                 const localSettings = localFiles[0] && localFiles[0].content;
-                if (localSettings)
-                {
+                if (localSettings) {
                     // Merge remote and local settings.
                     settingsToSave = mergeSettings(settingsToSave, localSettings);
                 }
@@ -735,8 +680,7 @@ export class VSCodeSetting
     /**
      * Save the `VSCode Setting` to disk.
      */
-    private _saveToFile(setting: ISetting)
-    {
+    private _saveToFile(setting: ISetting) {
         return fs.outputFile(setting.localFilePath, setting.content ?? "{}").then(() => ({ setting } as ISyncedItem));
     }
 
@@ -747,12 +691,10 @@ export class VSCodeSetting
         settings: ISetting[],
         settingsToSave: ISetting[],
         settingsToRemove: ISetting[]
-    ): Promise<boolean>
-    {
+    ): Promise<boolean> {
         let result = true;
         const threshold = getVSCodeSetting<number>(CONFIGURATION_KEY, CONFIGURATION_POKA_YOKE_THRESHOLD);
-        if (threshold > 0)
-        {
+        if (threshold > 0) {
             const localSettings = await this._loadContent(settings, false);
 
             // poka-yoke - Determines whether there're too much changes since the last uploading.
@@ -774,8 +716,7 @@ export class VSCodeSetting
             // 3. Diff settings.
             const changes = settingsToRemove.length
                 + this._diffSettings(excludedSettings.localSettings, excludedSettings.remoteSettings);
-            if (changes >= threshold)
-            {
+            if (changes >= threshold) {
                 const okButton = localize("pokaYoke.continue.download");
                 const message = localize("pokaYoke.continue.download.message");
                 const selection = await Toast.showConfirmBox(message, okButton, localize("pokaYoke.cancel"));
@@ -788,32 +729,25 @@ export class VSCodeSetting
     /**
      * Excludes settings based on the excluded setting of remote settings.
      */
-    private _excludeSettings(localSettings: ISetting[], remoteSettings: ISetting[], type: SettingType)
-    {
+    private _excludeSettings(localSettings: ISetting[], remoteSettings: ISetting[], type: SettingType) {
         const lSetting = localSettings.find((setting) => (setting.type === type));
         const rSetting = remoteSettings.find((setting) => (setting.type === type));
-        if (lSetting && lSetting.content && rSetting && rSetting.content)
-        {
+        if (lSetting && lSetting.content && rSetting && rSetting.content) {
             const lSettingJSON = parse(lSetting.content);
             const rSettingJSON = parse(rSetting.content);
-            if (lSettingJSON && rSettingJSON)
-            {
-                if (type === SettingType.Settings)
-                {
+            if (lSettingJSON && rSettingJSON) {
+                if (type === SettingType.Settings) {
                     // Exclude settings.
                     const patterns = rSettingJSON[SETTING_EXCLUDED_SETTINGS] ?? [];
                     lSetting.content = excludeSettings(lSetting.content, lSettingJSON, patterns);
                     rSetting.content = excludeSettings(rSetting.content, rSettingJSON, patterns);
                 }
-                else if (type === SettingType.Extensions)
-                {
+                else if (type === SettingType.Extensions) {
                     // Exclude extensions.
                     const rVSCodeSettings = remoteSettings.find((setting) => (setting.type === SettingType.Settings));
-                    if (rVSCodeSettings && rVSCodeSettings.content)
-                    {
+                    if (rVSCodeSettings && rVSCodeSettings.content) {
                         const rVSCodeSettingsJSON = parse(rVSCodeSettings.content);
-                        if (rVSCodeSettingsJSON)
-                        {
+                        if (rVSCodeSettingsJSON) {
                             const patterns: string[] = rVSCodeSettingsJSON[SETTING_EXCLUDED_EXTENSIONS] ?? [];
                             lSetting.content = JSON.stringify(this._getExcludedExtensions(lSettingJSON, patterns));
                             rSetting.content = JSON.stringify(this._getExcludedExtensions(rSettingJSON, patterns));
@@ -828,10 +762,8 @@ export class VSCodeSetting
     /**
      * Gets excluded extensions based on the excluded setting of remote settings.
      */
-    private _getExcludedExtensions(extensions: IExtension[], patterns: string[])
-    {
-        return extensions.filter((ext) =>
-        {
+    private _getExcludedExtensions(extensions: IExtension[], patterns: string[]) {
+        return extensions.filter((ext) => {
             return !patterns.some((pattern) => micromatch.isMatch(ext.id, pattern));
         });
     }
@@ -839,8 +771,7 @@ export class VSCodeSetting
     /**
      * Calculates the number of differences between the local and remote settings.
      */
-    private _diffSettings(localSettings: ISetting[], remoteSettings: ISetting[]): number
-    {
+    private _diffSettings(localSettings: ISetting[], remoteSettings: ISetting[]): number {
         const left = this._parseToJSON(localSettings);
         const right = this._parseToJSON(remoteSettings);
         return diff(left, right);
@@ -849,22 +780,17 @@ export class VSCodeSetting
     /**
      * Converts the `content` of `ISetting[]` into a `JSON object`.
      */
-    private _parseToJSON(settings: ISetting[]): Record<string, any>
-    {
+    private _parseToJSON(settings: ISetting[]): Record<string, any> {
         let parsed: any;
         let content: string;
         const result: Record<string, any> = {};
-        for (const setting of settings)
-        {
+        for (const setting of settings) {
             content = setting.content ?? "";
             parsed = parse(content);
 
-            if (setting.type === SettingType.Extensions && Array.isArray(parsed))
-            {
-                for (const ext of parsed)
-                {
-                    if (ext["id"] != null)
-                    {
+            if (setting.type === SettingType.Extensions && Array.isArray(parsed)) {
+                for (const ext of parsed) {
+                    if (ext["id"] != null) {
                         ext["id"] = ext["id"].toLocaleLowerCase();
                     }
 

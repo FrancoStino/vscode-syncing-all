@@ -8,8 +8,7 @@ import type { NormalizedLocale as NormalizedLocaleType } from "../types";
 
 let instance: I18n;
 
-class I18n
-{
+class I18n {
     private static _instance: I18n;
     private static _DEFAULT_LOCALE_FILENAME: string = "package.nls.json";
 
@@ -17,8 +16,7 @@ class I18n
     private _extensionPath: string;
     private _locale: NormalizedLocaleType;
 
-    private constructor(extensionPath: string)
-    {
+    private constructor(extensionPath: string) {
         this._extensionPath = extensionPath;
         this._locale = getNormalizedVSCodeLocale();
         this._prepare();
@@ -27,10 +25,8 @@ class I18n
     /**
      * Creates an instance of the singleton class `I18n`.
      */
-    public static create(extensionPath: string): I18n
-    {
-        if (!I18n._instance || I18n._instance._extensionPath !== extensionPath)
-        {
+    public static create(extensionPath: string): I18n {
+        if (!I18n._instance || I18n._instance._extensionPath !== extensionPath) {
             I18n._instance = new I18n(extensionPath);
         }
         return I18n._instance;
@@ -39,8 +35,7 @@ class I18n
     /**
      * Gets the VSCode locale.
      */
-    public get locale(): NormalizedLocaleType
-    {
+    public get locale(): NormalizedLocaleType {
         return this._locale;
     }
 
@@ -51,12 +46,10 @@ class I18n
      * @param {...any[]} templateValues If the message is a template string,
      * these args will be used to replace the templates.
      */
-    public localize(key: string, ...templateValues: any[]): string
-    {
+    public localize(key: string, ...templateValues: any[]): string {
         // `key` value shouldn't have leading dot.
         let normalizedKey = key;
-        if (normalizedKey.startsWith("."))
-        {
+        if (normalizedKey.startsWith(".")) {
             normalizedKey = normalizedKey.substr(1);
         }
 
@@ -64,8 +57,7 @@ class I18n
             ? this._bundle[normalizedKey]
             : normalizedKey;
 
-        if (templateValues && templateValues.length > 0)
-        {
+        if (templateValues && templateValues.length > 0) {
             return format(value, templateValues);
         }
         return value;
@@ -74,8 +66,7 @@ class I18n
     /**
      * Prepare the message bundle.
      */
-    private _prepare()
-    {
+    private _prepare() {
         // Default hardcoded bundle as fallback
         const defaultBundle = {
             "error.initialization": "Failed to initialize Syncing: {0}",
@@ -145,48 +136,57 @@ class I18n
             "toast.files.error": "Error listing files: {0}",
             "toast.revisions.error": "Error listing revisions: {0}",
             "toast.dates.error": "Error listing dates: {0}",
-            "toast.settings.checking.google.folders": "Checking Google Drive folders..."
+            "toast.settings.checking.google.folders": "Checking Google Drive folders...",
+            "common.failed": "Failed",
+            "command.disabled": "Extension is not ready. :(",
+            "common.auto": "Auto",
+            "common.manually": "Manually",
+            "common.loading": "Loading...",
+            "toast.ext.updated": "Extensions updated.",
+            "toast.settings.downloaded": "{0} new items, {1} removed.",
+            "toast.settings.remove.items": "{0} items removed.",
+            "toast.settings.all.synced": "All items are synced.",
+            "toast.settings.gathering.remote": "Gathering remote settings...",
+            "toast.settings.prepared": "Syncing settings prepared.",
+            "toast.settings.check.timestamp": "Check modified date...",
+            "toast.settings.keep.newer": "Keep {0} newer items...",
+            "toast.settings.statedb.changed.reload.message": "File state.vscdb è stato modificato. È necessario riavviare VSCode per applicare le modifiche.",
+            "toast.box.reload.message": "Please reload VSCode Editor.",
+            "toast.box.reload": "Reload"
         };
 
         // Initialize with the default bundle
         this._bundle = { ...defaultBundle };
 
-        try
-        {
+        try {
             // Try to load the external bundles
-            try
-            {
+            try {
                 // nls.<locale>.json - load the default locale file
                 const defaultBundlePath = path.join(this._extensionPath, I18n._DEFAULT_LOCALE_FILENAME);
                 const loadedBundle = readJsonSync(defaultBundlePath);
                 // Merge with the default bundle, keeping default values if loading fails
                 this._bundle = { ...this._bundle, ...loadedBundle };
             }
-            catch (err)
-            {
+            catch (err) {
                 console.warn("Failed to load default locale file, using hardcoded strings as fallback");
             }
 
             // Try to load localized strings if available
-            try
-            {
+            try {
                 const localeFilename = path.join(this._extensionPath, `package.nls.${this._locale}.json`);
                 const localizedBundle = readJsonSync(localeFilename);
                 // Merge with the previously loaded bundle
                 this._bundle = { ...this._bundle, ...localizedBundle };
             }
-            catch
-            {
+            catch {
                 /* Ignore localization load errors */
                 // Only log warning for non-English locales since English is the default
-                if (this._locale !== NormalizedLocale.EN_US)
-                {
+                if (this._locale !== NormalizedLocale.EN_US) {
                     console.warn(`Failed to load locale file for ${this._locale}, using default locale`);
                 }
             }
         }
-        catch (err: any)
-        {
+        catch (err: any) {
             console.error("Failed to parse the i18n bundle:", err);
             // Ensure we still have the default bundle
             this._bundle = { ...defaultBundle };
@@ -197,16 +197,14 @@ class I18n
 /**
  * Setup the i18n module.
  */
-export function setup(extensionPath: string): void
-{
+export function setup(extensionPath: string): void {
     instance = I18n.create(extensionPath);
 }
 
 /**
  * Gets the VSCode locale.
  */
-export function locale(): NormalizedLocaleType
-{
+export function locale(): NormalizedLocaleType {
     return instance.locale;
 }
 
@@ -217,7 +215,6 @@ export function locale(): NormalizedLocaleType
  * @param {...any[]} templateValues If the message is a template string,
  * these args will be used to replace the templates.
  */
-export function localize(key: string, ...templateValues: any[]): string
-{
+export function localize(key: string, ...templateValues: any[]): string {
     return instance.localize(key, ...templateValues);
 }
