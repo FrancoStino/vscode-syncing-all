@@ -653,18 +653,40 @@ export class Extension
 
             if (!fs.existsSync(stateDBPath))
             {
-                this._logError(`state.vscdb file not found at ${stateDBPath}`);
+                this._logInfo(`SQLite: state.vscdb file not found at ${stateDBPath}, skipping immediate disable`);
                 return;
             }
 
-            // Create a temporary copy of the database
-            const tempDBPath = `${stateDBPath}.temp`;
-            fs.copyFileSync(stateDBPath, tempDBPath);
+            // Log only - no error shown to the user
+            this._logInfo(`Marking extension ${extension.id} as disabled. Actual disabling will happen at next VSCode restart.`);
 
+            // Verifico se è possibile evitare completamente la dipendenza da SQLite
             try
             {
-                // Use sqlite3 directly without verbose mode
-                const sqlite3 = require("sqlite3");
+                // Verifico se posso importare sqlite3
+                let sqlite3 = null;
+                try
+                {
+                    sqlite3 = require("sqlite3");
+                }
+                catch (e)
+                {
+                    this._logInfo("SQLite: Module not available in this environment, extension will be disabled at next restart");
+                    return; // Esci silenziosamente se sqlite3 non è disponibile
+                }
+
+                // Verifico se Database è un costruttore valido
+                if (!sqlite3 || typeof sqlite3.Database !== "function")
+                {
+                    this._logInfo("SQLite: Database constructor not available, extension will be disabled at next restart");
+                    return; // Esci silenziosamente se Database non è un costruttore
+                }
+
+                // Creo una copia temporanea del database
+                const tempDBPath = `${stateDBPath}.temp`;
+                fs.copyFileSync(stateDBPath, tempDBPath);
+
+                // Tento l'operazione
                 const db = new sqlite3.Database(tempDBPath);
 
                 // First, try to get existing disabled extensions
@@ -672,7 +694,7 @@ export class Extension
                 {
                     if (dbError)
                     {
-                        this._logError("Error reading disabled extensions:", dbError);
+                        this._logInfo(`SQLite: Error reading disabled extensions: ${dbError.message}`);
                         db.close();
                         fs.unlinkSync(tempDBPath);
                         return;
@@ -691,7 +713,7 @@ export class Extension
                         }
                         catch (parseError)
                         {
-                            this._logError("Error parsing disabled extensions:", parseError);
+                            this._logInfo(`SQLite: Error parsing disabled extensions: ${(parseError as Error).message}`);
                             disabledExtensions = [];
                         }
                     }
@@ -712,7 +734,7 @@ export class Extension
                         {
                             if (updateError)
                             {
-                                this._logError("Error updating disabled extensions:", updateError);
+                                this._logInfo(`SQLite: Error updating disabled extensions: ${updateError.message}`);
                                 db.close();
                                 fs.unlinkSync(tempDBPath);
                                 return;
@@ -723,7 +745,7 @@ export class Extension
                             {
                                 if (closeError)
                                 {
-                                    this._logError("Error closing database:", closeError);
+                                    this._logInfo(`SQLite: Error closing database: ${closeError.message}`);
                                     if (fs.existsSync(tempDBPath))
                                     {
                                         fs.unlinkSync(tempDBPath);
@@ -736,13 +758,13 @@ export class Extension
                                 {
                                     fs.renameSync(stateDBPath, `${stateDBPath}.backup`);
                                     fs.renameSync(tempDBPath, stateDBPath);
-                                    this._logInfo(`Extension ${extension.id} disabled in state.vscdb`);
+                                    this._logInfo(`SQLite: Extension ${extension.id} immediately disabled in state.vscdb`);
                                     // Remove backup after successful operation
                                     fs.unlinkSync(`${stateDBPath}.backup`);
                                 }
                                 catch (fsError)
                                 {
-                                    this._logError("Error replacing database file:", fsError);
+                                    this._logInfo(`SQLite: Error replacing database file: ${(fsError as Error).message}`);
                                     // Try to restore from backup if it exists
                                     if (fs.existsSync(`${stateDBPath}.backup`))
                                     {
@@ -756,17 +778,16 @@ export class Extension
             }
             catch (dbError)
             {
-                // Clean up the temporary file if something goes wrong
-                if (fs.existsSync(tempDBPath))
-                {
-                    fs.unlinkSync(tempDBPath);
-                }
-                this._logError("Database operation failed:", dbError);
+                // Ignora l'errore, le estensioni verranno disabilitate al prossimo riavvio di VSCode
+                this._logInfo(`SQLite: Database operation could not be completed: ${(dbError as Error).message}`);
+                // Nessun messaggio di errore mostrato all'utente, l'operazione è opzionale
             }
         }
         catch (error)
         {
-            this._logError(`Failed to disable extension ${extension.id} in state.vscdb:`, error);
+            // Ignora qualsiasi errore, le estensioni verranno disabilitate al prossimo riavvio di VSCode
+            this._logInfo(`Fallback disable: Extension ${extension.id} will be disabled at next VSCode restart`);
+            // Nessun messaggio di errore mostrato all'utente, l'operazione è opzionale
         }
     }
 

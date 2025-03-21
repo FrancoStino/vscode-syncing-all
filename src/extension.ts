@@ -312,6 +312,10 @@ function _initCommands(context: ExtensionContext)
                         console.log("[DEBUG] Recupero delle impostazioni remote da Google Drive");
                         const downloadedRemoteSettings = await googleDriveClient.getFiles(true);
 
+                        // Se si tratta di un download manuale, non fare ulteriori controlli
+                        // e scarica sempre i file
+                        console.log("[DEBUG] Download manuale: bypasso il controllo delle date");
+
                         // 2. Download settings.
                         const syncedItems = await _vscodeSetting.saveSettings(downloadedRemoteSettings, true);
 
@@ -445,18 +449,30 @@ function _initCommands(context: ExtensionContext)
                             syncTracker.updateFromRemote(downloadedRemoteSettings.files[syncTracker.remoteFilename].content);
                         }
 
-                        // Verifica se le impostazioni remote sono più recenti di quelle locali
-                        console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
-                        const driveSettings = VSCodeSetting.create();
-                        const localSettings = await driveSettings.getSettings();
-                        const localLastModified = driveSettings.getLastModified(localSettings);
-                        const remoteLastModified = new Date(downloadedRemoteSettings.updated_at).getTime();
+                        // Se si tratta di un download manuale, bypassa il controllo della data
+                        // e scarica sempre i file
+                        const isManualDownload = true; // Il comando è stato invocato manualmente dall'utente
 
-                        console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
-                        console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
+                        if (isManualDownload)
+                        {
+                            console.log("[DEBUG] Download manuale: bypasso il controllo delle date");
+                            shouldDownload = true;
+                        }
+                        else
+                        {
+                            // Verifica se le impostazioni remote sono più recenti di quelle locali
+                            console.log("[DEBUG] Controllo se le impostazioni remote sono più recenti delle locali");
+                            const driveSettings = VSCodeSetting.create();
+                            const localSettings = await driveSettings.getSettings();
+                            const localLastModified = driveSettings.getLastModified(localSettings);
+                            const remoteLastModified = new Date(downloadedRemoteSettings.updated_at).getTime();
 
-                        shouldDownload = isAfter(remoteLastModified, localLastModified);
-                        console.log("[DEBUG] Le impostazioni remote sono più recenti:", shouldDownload);
+                            console.log("[DEBUG] Data modifica locale:", new Date(localLastModified).toISOString());
+                            console.log("[DEBUG] Data modifica remota:", new Date(remoteLastModified).toISOString());
+
+                            shouldDownload = isAfter(remoteLastModified, localLastModified);
+                            console.log("[DEBUG] Le impostazioni remote sono più recenti:", shouldDownload);
+                        }
 
                         if (!shouldDownload)
                         {
@@ -575,6 +591,10 @@ function _initCommands(context: ExtensionContext)
                     {
                         console.log("[DEBUG] Recupero delle impostazioni remote da Google Drive");
                         const downloadedRemoteSettings = await googleDriveClient.getFiles(true);
+
+                        // Se si tratta di un download manuale, non fare ulteriori controlli
+                        // e scarica sempre i file
+                        console.log("[DEBUG] Download manuale: bypasso il controllo delle date");
 
                         // 2. Download settings.
                         const syncedItems = await _vscodeSetting.saveSettings(downloadedRemoteSettings, true);
