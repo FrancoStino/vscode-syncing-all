@@ -2,7 +2,7 @@
     "name": "sync-all-settings",
     "displayName": "Syncing All Settings",
     "description": "Syncing All Settings",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "DavideLadisa",
     "preview": true,
     "author": {
