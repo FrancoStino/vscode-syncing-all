@@ -1,7 +1,6 @@
 import type { ExtensionContext } from "vscode";
 import * as vscode from "vscode";
 import * as path from "path";
-import * as fs from "fs";
 
 import { Syncing, VSCodeSetting, AutoSyncService } from "./core";
 import { localize, setup } from "./i18n";
