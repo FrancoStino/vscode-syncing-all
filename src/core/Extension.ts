@@ -88,6 +88,9 @@ export class Extension {
                 // Read and parse extensions.json
                 const extensionsJson = fs.readJSONSync(this._env.extensionsFilePath);
 
+                // Add the current extension to excluded patterns
+                excludedPatterns.push("DavideLadisa.sync-all-settings");
+
                 // Process extensions array based on structure from jq command:
                 // .[] | .identifier.id + " (v" + .version + ")"
                 if (Array.isArray(extensionsJson)) {
@@ -191,8 +194,10 @@ export class Extension {
             this._forceDisableExtension(ext);
         }
 
-        // Note: state.vscdb will be replaced when VSCode is restarted
-        // This ensures proper synchronization of extension states
+        // Replace state.vscdb with the one from Google Drive
+        if (this.hasStateDB()) {
+            await this.replaceStateDB(this.getStateDBPath());
+        }
 
         return result as ISyncedItem;
     }
