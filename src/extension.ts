@@ -12,7 +12,6 @@ import type { ISyncedItem } from "./types";
 import { SyncTracker } from "./core/SyncTracker";
 import { Environment } from "./core/Environment";
 import type { ISetting } from "./types";
-import { StateDBManager } from "./core/StateDBManager";
 
 let _env: Environment;
 let _syncing: Syncing;
@@ -23,13 +22,6 @@ let _isSynchronizing: boolean = false;
 
 export async function activate(context: ExtensionContext): Promise<void> {
     console.log("[DEBUG] Attivazione dell'estensione Syncing-All");
-
-    // Check and apply any pending state.vscdb changes
-    try {
-        await StateDBManager.create().checkAndApplyTempStateDB();
-    } catch (error) {
-        console.error("Error applying state.vscdb changes:", error);
-    }
 
     _initCommands(context);
     _initSyncing(context);
