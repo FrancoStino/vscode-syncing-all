@@ -21,12 +21,12 @@ let _autoSyncService: AutoSyncService;
 let _isReady: boolean = false;
 let _isSynchronizing: boolean = false;
 
-export async function activate(context: ExtensionContext) {
+export async function activate(context: ExtensionContext): Promise<void> {
     console.log("[DEBUG] Attivazione dell'estensione Syncing-All");
 
     // Check and apply any pending state.vscdb changes
     try {
-        await StateDBManager.getInstance().checkAndApplyTempStateDB();
+        await StateDBManager.create().checkAndApplyTempStateDB();
     } catch (error) {
         console.error("Error applying state.vscdb changes:", error);
     }
@@ -64,8 +64,8 @@ export async function activate(context: ExtensionContext) {
     );
 }
 
-export function deactivate() {
-    console.log("[DEBUG] Disattivazione dell'estensione Syncing-All");
+export function deactivate(): void {
+    console.log("Syncing extension deactivated");
     _stopAutoSyncService();
 }
 

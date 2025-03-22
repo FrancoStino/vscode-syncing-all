@@ -19,6 +19,7 @@ import { localize } from "../i18n";
 import { Syncing } from "./Syncing";
 import * as Toast from "./Toast";
 import type { IExtension, ExtensionMeta, ISyncedItem } from "../types";
+import { StateDBManager } from "./StateDBManager";
 
 tmp.setGracefulCleanup();
 
@@ -242,88 +243,54 @@ export class Extension {
             const currentStateDBPath = this.getStateDBPath();
             this._logInfo(`Attempting to replace state.vscdb from ${googleDriveStateDBPath} to ${currentStateDBPath}`);
 
-            // Create a backup of the current state.vscdb if it exists
-            if (this.hasStateDB()) {
-                const backupPath = `${currentStateDBPath}.backup`;
-                await fs.copy(currentStateDBPath, backupPath);
-                this._logInfo(`Created backup of state.vscdb at ${backupPath}`);
-            }
-            else {
-                this._logInfo(`No existing state.vscdb found at ${currentStateDBPath}`);
-            }
-
+            // Read the content of the Google Drive file - handle both binary and base64 encoded files
+            let driveContent;
             try {
-                // Ensure directory exists
-                await fs.ensureDir(path.dirname(currentStateDBPath));
-                this._logInfo(`Ensured directory exists: ${path.dirname(currentStateDBPath)}`);
+                // First try to read as binary file
+                driveContent = await fs.readFile(googleDriveStateDBPath);
+                this._logInfo(`Read ${driveContent.length} bytes from Google Drive state.vscdb`);
 
-                // Read the content of the Google Drive file - handle both binary and base64 encoded files
-                let driveContent;
-                try {
-                    // First try to read as binary file
-                    driveContent = await fs.readFile(googleDriveStateDBPath);
-                    this._logInfo(`Read ${driveContent.length} bytes from Google Drive state.vscdb`);
-
-                    // Check if the content might be base64 encoded
-                    const contentAsString = driveContent.toString("utf8");
-                    if (contentAsString.match(/^[A-Za-z0-9+/=]+$/)) {
-                        try {
-                            // Try to decode it as base64
-                            const decoded = Buffer.from(contentAsString, "base64");
-                            driveContent = decoded;
-                            this._logInfo(`Detected and decoded base64 encoded state.vscdb file (${decoded.length} bytes)`);
-                        }
-                        catch (err) {
-                            // If decoding fails, use the original binary
-                            this._logInfo(`Content appears to be base64 but decoding failed, using as binary: ${err.message}`);
-                        }
-                    }
-                }
-                catch (err) {
-                    this._logError(`Error reading Google Drive state.vscdb: ${err.message}`);
-                    throw err;
-                }
-
-                // First try to remove the existing file if it exists
-                if (fs.existsSync(currentStateDBPath)) {
+                // Check if the content might be base64 encoded
+                const contentAsString = driveContent.toString("utf8");
+                if (contentAsString.match(/^[A-Za-z0-9+/=]+$/)) {
                     try {
-                        await fs.remove(currentStateDBPath);
-                        this._logInfo(`Removed existing state.vscdb file before writing new one`);
-                    } catch (removeErr) {
-                        this._logError(`Error removing existing state.vscdb: ${removeErr.message}`);
-                        // Continue anyway and try to write
+                        // Try to decode it as base64
+                        const decoded = Buffer.from(contentAsString, "base64");
+                        driveContent = decoded;
+                        this._logInfo(`Detected and decoded base64 encoded state.vscdb file (${decoded.length} bytes)`);
                     }
-                }
-
-                // Write the content directly to the current file
-                await fs.writeFile(currentStateDBPath, driveContent);
-
-                // Verify the file was written successfully
-                if (fs.existsSync(currentStateDBPath)) {
-                    const stats = await fs.stat(currentStateDBPath);
-                    this._logInfo(`Successfully replaced state.vscdb with version from Google Drive (size: ${stats.size} bytes)`);
-                } else {
-                    throw new Error("File was not written successfully - file doesn't exist after write operation");
-                }
-
-                // Remove the backup if everything succeeded
-                const backupPath = `${currentStateDBPath}.backup`;
-                if (fs.existsSync(backupPath)) {
-                    await fs.remove(backupPath);
-                    this._logInfo(`Removed backup after successful replacement`);
+                    catch (err) {
+                        // If decoding fails, use the original binary
+                        this._logInfo(`Content appears to be base64 but decoding failed, using as binary: ${err.message}`);
+                    }
                 }
             }
-            catch (error) {
-                // If operation fails, restore from backup if it exists
-                const backupPath = `${currentStateDBPath}.backup`;
-                if (fs.existsSync(backupPath)) {
-                    await fs.copy(backupPath, currentStateDBPath);
-                    await fs.remove(backupPath);
-                    this._logInfo("Restored state.vscdb from backup after failed replacement");
-                } else {
-                    this._logError(`No backup available to restore from after error: ${error.message}`);
+            catch (err) {
+                this._logError(`Error reading Google Drive state.vscdb: ${err.message}`);
+                throw err;
+            }
+
+            // Create a temporary file that we'll use for synchronization
+            const tempPath = `${currentStateDBPath}.temp.sync`;
+            await fs.writeFile(tempPath, driveContent);
+            this._logInfo(`Wrote content to temporary file ${tempPath}`);
+
+            // Use StateDBManager to merge the databases
+            try {
+                const stateDBManager = StateDBManager.create();
+                await stateDBManager.mergeStateDB(tempPath);
+                this._logInfo(`Successfully merged state.vscdb content`);
+            }
+            catch (mergeError) {
+                this._logError(`Error merging state.vscdb: ${mergeError.message}`);
+                throw mergeError;
+            }
+            finally {
+                // Remove the temporary file
+                if (fs.existsSync(tempPath)) {
+                    await fs.remove(tempPath);
+                    this._logInfo(`Removed temporary sync file ${tempPath}`);
                 }
-                throw error;
             }
         }
         catch (error) {

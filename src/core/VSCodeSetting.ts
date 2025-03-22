@@ -24,6 +24,7 @@ import { SettingType } from "../types";
 import * as Toast from "./Toast";
 import type { IExtension, ISetting, ISyncedItem, IGoogleDrive as IRemoteStorage, IGoogleDriveFile as IRemoteFile } from "../types";
 import { SyncTracker } from "./SyncTracker";
+import { StateDBManager } from "./StateDBManager";
 
 /**
  * `VSCode Settings` wrapper.
@@ -599,29 +600,42 @@ export class VSCodeSetting {
                         throw new Error(`Invalid base64 content for state.vscdb: ${err.message}`);
                     }
 
-                    // Instead of writing directly, create a temporary file that will be used on restart
-                    const tempPath = `${setting.localFilePath}.temp`;
+                    // Create a temporary file for the merging operation
+                    const tempPath = `${setting.localFilePath}.temp.sync`;
                     await fs.writeFile(tempPath, buffer);
-                    console.log(`Successfully saved state.vscdb to temporary file ${tempPath}. It will be applied on next VSCode restart.`);
+                    console.log(`Successfully wrote content to temporary file ${tempPath}`);
+
+                    // Use StateDBManager to merge the databases
+                    try {
+                        const stateDBManager = StateDBManager.create();
+                        await stateDBManager.mergeStateDB(tempPath);
+                        console.log(`Successfully merged state.vscdb content`);
+                    }
+                    catch (mergeError) {
+                        console.error(`Error merging state.vscdb: ${mergeError.message}`);
+                        throw mergeError;
+                    }
+                    finally {
+                        // Remove the temporary file
+                        if (fs.existsSync(tempPath)) {
+                            await fs.remove(tempPath);
+                            console.log(`Removed temporary sync file ${tempPath}`);
+                        }
+                    }
                 }
                 catch (err) {
                     console.error(`Error saving state.vscdb: ${err.message}`);
-                    console.error("Stack trace:", err.stack);
 
-                    // Try to restore from backup if available
+                    // Restore from backup if it exists
                     const backupPath = `${setting.localFilePath}.backup`;
-                    if (fs.existsSync(backupPath)) {
-                        try {
-                            await fs.copy(backupPath, setting.localFilePath);
-                            console.log(`Restored state.vscdb from backup after error`);
-                            await fs.remove(backupPath);
-                        } catch (restoreErr) {
-                            console.error(`Failed to restore from backup: ${restoreErr.message}`);
-                        }
+                    if (fs.existsSync(backupPath) && fs.existsSync(setting.localFilePath)) {
+                        await fs.copy(backupPath, setting.localFilePath);
+                        await fs.remove(backupPath);
+                        console.log(`Restored state.vscdb from backup after error`);
                     }
 
-                    // Continue execution even if we can't write the state.vscdb file
-                    // This prevents the sync from failing completely
+                    // Rethrow error
+                    throw err;
                 }
             }
             else {
