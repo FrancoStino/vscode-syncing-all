@@ -599,36 +599,10 @@ export class VSCodeSetting {
                         throw new Error(`Invalid base64 content for state.vscdb: ${err.message}`);
                     }
 
-                    // Write file with explicit overwrite
-                    try {
-                        // First try to remove the file if it exists
-                        if (fs.existsSync(setting.localFilePath)) {
-                            await fs.remove(setting.localFilePath);
-                            console.log(`Removed existing state.vscdb at ${setting.localFilePath}`);
-                        }
-
-                        // Write the file
-                        await fs.writeFile(setting.localFilePath, buffer);
-
-                        // Verify the file was written
-                        const fileExists = fs.existsSync(setting.localFilePath);
-                        const fileSize = fileExists ? (await fs.stat(setting.localFilePath)).size : 0;
-                        console.log(`Successfully saved state.vscdb to ${setting.localFilePath} (exists: ${fileExists}, size: ${fileSize} bytes)`);
-
-                        if (!fileExists || fileSize === 0) {
-                            throw new Error(`File was not written properly: exists=${fileExists}, size=${fileSize}`);
-                        }
-                    } catch (writeErr) {
-                        console.error(`Error writing state.vscdb: ${writeErr.message}`);
-                        throw writeErr;
-                    }
-
-                    // Remove the backup if everything succeeded
-                    const backupPath = `${setting.localFilePath}.backup`;
-                    if (fs.existsSync(backupPath)) {
-                        await fs.remove(backupPath);
-                        console.log(`Removed backup after successful save`);
-                    }
+                    // Instead of writing directly, create a temporary file that will be used on restart
+                    const tempPath = `${setting.localFilePath}.temp`;
+                    await fs.writeFile(tempPath, buffer);
+                    console.log(`Successfully saved state.vscdb to temporary file ${tempPath}. It will be applied on next VSCode restart.`);
                 }
                 catch (err) {
                     console.error(`Error saving state.vscdb: ${err.message}`);

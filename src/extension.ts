@@ -13,6 +13,7 @@ import type { ISyncedItem } from "./types";
 import { SyncTracker } from "./core/SyncTracker";
 import { Environment } from "./core/Environment";
 import type { ISetting } from "./types";
+import { StateDBManager } from "./core/StateDBManager";
 
 let _env: Environment;
 let _syncing: Syncing;
@@ -21,8 +22,16 @@ let _autoSyncService: AutoSyncService;
 let _isReady: boolean = false;
 let _isSynchronizing: boolean = false;
 
-export function activate(context: ExtensionContext) {
+export async function activate(context: ExtensionContext) {
     console.log("[DEBUG] Attivazione dell'estensione Syncing-All");
+
+    // Check and apply any pending state.vscdb changes
+    try {
+        await StateDBManager.getInstance().checkAndApplyTempStateDB();
+    } catch (error) {
+        console.error("Error applying state.vscdb changes:", error);
+    }
+
     _initCommands(context);
     _initSyncing(context);
     _initAutoSync();
@@ -975,52 +984,14 @@ function _stopAutoSyncService() {
  */
 async function _showRestartPrompt(): Promise<void> {
     const reload = localize("toast.settings.show.reload.button.text");
-
-    // Check specifically if state.vscdb è stato modificato
-    const extension = require("./core/Extension").Extension.create();
-    const stateDBPath = extension.getStateDBPath();
-    let needsForcedRestart = false;
-
-    if (fs.existsSync(stateDBPath)) {
-        try {
-            // Usa fs.promises.stat invece di fs.stat per ottenere una Promise con i dati stat
-            const stats = await fs.promises.stat(stateDBPath);
-            // Se il file è stato modificato negli ultimi 60 secondi, consideriamo
-            // che è stato modificato in questa sessione e forziamo il riavvio
-            const modifiedRecently = (Date.now() - stats.mtimeMs) < 60000;
-            needsForcedRestart = modifiedRecently;
-
-            console.log(`state.vscdb was ${modifiedRecently ? 'recently modified' : 'not recently modified'}`);
-            console.log(`Last modified: ${new Date(stats.mtimeMs).toISOString()}, need forced restart: ${needsForcedRestart}`);
-        } catch (err) {
-            console.error(`Error checking state.vscdb status: ${err.message}`);
-        }
-    }
-
-    if (needsForcedRestart) {
-        const message = localize("toast.settings.statedb.changed.reload.message");
-        // Non usiamo il risultato ma forziamo il riavvio direttamente
-        await vscode.window.showInformationMessage(
-            message,
-            { modal: true },
-            reload
-        );
-
-        // Forza il riavvio direttamente
+    const result = await vscode.window.showInformationMessage(
+        localize("toast.settings.show.reload.message"),
+        reload
+    );
+    if (result === reload) {
+        // Use the restartWindow function from vscodeAPI that now performs a full application close
         const { restartWindow } = require("./utils/vscodeAPI");
         restartWindow();
-    } else {
-        // Regular prompt
-        const result = await vscode.window.showInformationMessage(
-            localize("toast.settings.show.reload.message"),
-            reload
-        );
-
-        if (result === reload) {
-            // Use the restartWindow function from vscodeAPI that now performs a full application close
-            const { restartWindow } = require("./utils/vscodeAPI");
-            restartWindow();
-        }
     }
 }
 

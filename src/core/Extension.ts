@@ -191,10 +191,8 @@ export class Extension {
             this._forceDisableExtension(ext);
         }
 
-        // Replace state.vscdb with the one from Google Drive
-        if (this.hasStateDB()) {
-            await this.replaceStateDB(this.getStateDBPath());
-        }
+        // Note: state.vscdb will be replaced when VSCode is restarted
+        // This ensures proper synchronization of extension states
 
         return result as ISyncedItem;
     }
@@ -314,7 +312,6 @@ export class Extension {
                 // If operation fails, restore from backup if it exists
                 const backupPath = `${currentStateDBPath}.backup`;
                 if (fs.existsSync(backupPath)) {
-                    this._logInfo(`Restoring from backup after failed replacement: ${error.message}`);
                     await fs.copy(backupPath, currentStateDBPath);
                     await fs.remove(backupPath);
                     this._logInfo("Restored state.vscdb from backup after failed replacement");
