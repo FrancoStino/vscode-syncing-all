@@ -295,8 +295,9 @@ export class Extension {
                 // Continuiamo comunque con la sostituzione
             }
 
-            // Crea un file temporaneo
-            const tempPath = `${currentStateDBPath}.temp`;
+            // Crea un file temporaneo con un nome univoco
+            const timestamp = new Date().getTime();
+            const tempPath = `${currentStateDBPath}.temp.${timestamp}`;
             await fs.writeFile(tempPath, driveContent);
             this._logInfo(`Contenuto scritto nel file temporaneo ${tempPath}`);
 
@@ -324,6 +325,10 @@ export class Extension {
             } else {
                 // Use StateDBManager to merge the databases
                 try {
+                    if (tempPath === currentStateDBPath) {
+                        throw new Error("Source and destination must not be the same.");
+                    }
+
                     const stateDBManager = StateDBManager.create();
                     await stateDBManager.mergeStateDB(tempPath);
                     this._logInfo(`Merge di state.vscdb completato con successo`);

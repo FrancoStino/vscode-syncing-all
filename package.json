@@ -2,7 +2,7 @@
     "name": "sync-all-settings",
     "displayName": "Syncing All Settings",
     "description": "Syncing All Settings",
-    "version": "0.0.3",
+    "version": "0.0.5",
     "publisher": "DavideLadisa",
     "preview": true,
     "author": {
@@ -64,6 +64,10 @@
             {
                 "command": "syncing.restoreAllSettingsToDate",
                 "title": "Syncing: Restore All Settings to Specific Date"
+            },
+            {
+                "command": "syncing.toggleStateDBReplacementMethod",
+                "title": "Syncing: Toggle State DB Replacement Method (Replace/Merge)"
             }
         ],
         "configuration": [

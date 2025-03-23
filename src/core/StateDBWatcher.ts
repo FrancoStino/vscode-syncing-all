@@ -19,6 +19,12 @@ export class StateDBWatcher {
     constructor(tempFilePath: string, targetFilePath: string) {
         this.tempFilePath = tempFilePath;
         this.targetFilePath = targetFilePath;
+
+        // Verifica che i percorsi siano diversi
+        if (this.tempFilePath === this.targetFilePath) {
+            throw new Error("Source and destination must not be the same.");
+        }
+
         this.replacerScriptPath = this.createReplacerScript();
     }
 
@@ -57,6 +63,17 @@ if exist "${this.targetFilePath}" (
     copy "${this.targetFilePath}" "${this.targetFilePath}.backup"
 )
 
+rem Verifica che i file esistano e siano diversi
+if not exist "${this.tempFilePath}" (
+    echo ERRORE: Il file sorgente non esiste: ${this.tempFilePath}
+    exit /b 1
+)
+
+if "${this.tempFilePath}" == "${this.targetFilePath}" (
+    echo ERRORE: I file sorgente e destinazione non possono essere uguali
+    exit /b 1
+)
+
 copy "${this.tempFilePath}" "${this.targetFilePath}"
 del "${this.tempFilePath}"
 
@@ -90,6 +107,17 @@ if [ -f "${this.targetFilePath}" ]; then
     cp "${this.targetFilePath}" "${this.targetFilePath}.backup"
 fi
 
+# Verifica che i file esistano e siano diversi
+if [ ! -f "${this.tempFilePath}" ]; then
+    echo "ERRORE: Il file sorgente non esiste: ${this.tempFilePath}"
+    exit 1
+fi
+
+if [ "${this.tempFilePath}" = "${this.targetFilePath}" ]; then
+    echo "ERRORE: I file sorgente e destinazione non possono essere uguali"
+    exit 1
+fi
+
 # Sostituisci il file
 cp "${this.tempFilePath}" "${this.targetFilePath}"
 rm "${this.tempFilePath}"
@@ -112,6 +140,11 @@ rm "$0"
      */
     public scheduleReplacementWhenClosed(): void {
         try {
+            // Verifica nuovamente che i percorsi siano diversi
+            if (this.tempFilePath === this.targetFilePath) {
+                throw new Error("Source and destination must not be the same.");
+            }
+
             // Esegui lo script in background
             const { spawn } = require("child_process");
 

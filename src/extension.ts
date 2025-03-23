@@ -718,6 +718,63 @@ function _initCommands(context: ExtensionContext) {
             }
         })
     );
+
+    // Register toggle state.vscdb replacement method command
+    context.subscriptions.push(
+        registerCommand(context, "syncing.toggleStateDBReplacementMethod", async () => {
+            try {
+                // Ottieni la configurazione attuale
+                const config = vscode.workspace.getConfiguration("syncing");
+                const currentMethod = config.get<string>("statedb.replacementMethod", "merge");
+
+                // Definisci le opzioni per il QuickPick
+                const options = [
+                    {
+                        label: "Replace (quando VS Code è chiuso)",
+                        description: "Sostituisce completamente il file state.vscdb alla chiusura di VS Code",
+                        value: "replace"
+                    },
+                    {
+                        label: "Merge",
+                        description: "Unisce le impostazioni dal file scaricato con quelle locali",
+                        value: "merge"
+                    }
+                ];
+
+                // Mostra le opzioni all'utente
+                const selection = await vscode.window.showQuickPick(options, {
+                    placeHolder: "Seleziona il metodo di sostituzione per state.vscdb",
+                    ignoreFocusOut: true
+                });
+
+                // Se l'utente ha selezionato un'opzione, aggiorna la configurazione
+                if (selection) {
+                    // Se il valore selezionato è diverso da quello attuale, aggiorna la configurazione
+                    if (selection.value !== currentMethod) {
+                        await config.update("statedb.replacementMethod", selection.value, vscode.ConfigurationTarget.Global);
+
+                        // Mostra un messaggio all'utente
+                        vscode.window.showInformationMessage(
+                            `Metodo di sostituzione di state.vscdb impostato su "${selection.label}"`
+                        );
+
+                        // Log per debug
+                        console.log(`[DEBUG] Metodo di sostituzione state.vscdb cambiato da "${currentMethod}" a "${selection.value}"`);
+                    } else {
+                        // Se l'utente ha selezionato lo stesso valore, mostra un messaggio informativo
+                        vscode.window.showInformationMessage(
+                            `Il metodo di sostituzione di state.vscdb è già impostato su "${selection.label}"`
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error("Errore durante il cambio del metodo di sostituzione:", error);
+                vscode.window.showErrorMessage(
+                    `Errore durante il cambio del metodo di sostituzione: ${error.message}`
+                );
+            }
+        })
+    );
 }
 
 /**
