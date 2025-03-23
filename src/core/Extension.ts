@@ -3,6 +3,7 @@ import * as fs from "fs-extra";
 import * as micromatch from "micromatch";
 import * as path from "path";
 import * as tmp from "tmp-promise";
+import * as vscode from "vscode";
 // import * as vscode from "vscode";
 
 import { CaseInsensitiveMap, CaseInsensitiveSet } from "../collections";
@@ -20,6 +21,7 @@ import { Syncing } from "./Syncing";
 import * as Toast from "./Toast";
 import type { IExtension, ExtensionMeta, ISyncedItem } from "../types";
 import { StateDBManager } from "./StateDBManager";
+import { StateDBWatcher } from "./StateDBWatcher";
 
 tmp.setGracefulCleanup();
 
@@ -241,14 +243,25 @@ export class Extension {
     public async replaceStateDB(googleDriveStateDBPath: string): Promise<void> {
         try {
             const currentStateDBPath = this.getStateDBPath();
-            this._logInfo(`Attempting to replace state.vscdb from ${googleDriveStateDBPath} to ${currentStateDBPath}`);
+
+            // Ottieni le impostazioni dell'utente per il metodo di sostituzione
+            const config = vscode.workspace.getConfiguration("syncing");
+            const replacementMethod = config.get<string>("statedb.replacementMethod", "merge");
+
+            this._logInfo(`Metodo di sostituzione state.vscdb: ${replacementMethod}`);
+
+            if (replacementMethod === "replace") {
+                this._logInfo(`Sostituendo completamente state.vscdb da ${googleDriveStateDBPath} a ${currentStateDBPath}`);
+            } else {
+                this._logInfo(`Eseguendo il merge di state.vscdb da ${googleDriveStateDBPath} a ${currentStateDBPath}`);
+            }
 
             // Read the content of the Google Drive file - handle both binary and base64 encoded files
             let driveContent;
             try {
                 // First try to read as binary file
                 driveContent = await fs.readFile(googleDriveStateDBPath);
-                this._logInfo(`Read ${driveContent.length} bytes from Google Drive state.vscdb`);
+                this._logInfo(`Letti ${driveContent.length} bytes dal file state.vscdb di Google Drive`);
 
                 // Check if the content might be base64 encoded
                 const contentAsString = driveContent.toString("utf8");
@@ -257,44 +270,79 @@ export class Extension {
                         // Try to decode it as base64
                         const decoded = Buffer.from(contentAsString, "base64");
                         driveContent = decoded;
-                        this._logInfo(`Detected and decoded base64 encoded state.vscdb file (${decoded.length} bytes)`);
+                        this._logInfo(`Rilevato e decodificato file state.vscdb in base64 (${decoded.length} bytes)`);
                     }
                     catch (err) {
                         // If decoding fails, use the original binary
-                        this._logInfo(`Content appears to be base64 but decoding failed, using as binary: ${err.message}`);
+                        this._logInfo(`Il contenuto sembra essere in base64 ma la decodifica è fallita, uso il binario originale: ${err.message}`);
                     }
                 }
             }
             catch (err) {
-                this._logError(`Error reading Google Drive state.vscdb: ${err.message}`);
+                this._logError(`Errore nella lettura del file state.vscdb di Google Drive: ${err.message}`);
                 throw err;
             }
 
-            // Create a temporary file that we'll use for synchronization
-            const tempPath = `${currentStateDBPath}.temp.sync`;
-            await fs.writeFile(tempPath, driveContent);
-            this._logInfo(`Wrote content to temporary file ${tempPath}`);
-
-            // Use StateDBManager to merge the databases
+            // Crea un backup del file corrente
+            const backupPath = `${currentStateDBPath}.backup`;
             try {
-                const stateDBManager = StateDBManager.create();
-                await stateDBManager.mergeStateDB(tempPath);
-                this._logInfo(`Successfully merged state.vscdb content`);
+                if (fs.existsSync(currentStateDBPath)) {
+                    await fs.copy(currentStateDBPath, backupPath);
+                    this._logInfo(`Backup creato in: ${backupPath}`);
+                }
+            } catch (backupError) {
+                this._logError(`Errore nella creazione del backup: ${backupError.message}`);
+                // Continuiamo comunque con la sostituzione
             }
-            catch (mergeError) {
-                this._logError(`Error merging state.vscdb: ${mergeError.message}`);
-                throw mergeError;
-            }
-            finally {
-                // Remove the temporary file
-                if (fs.existsSync(tempPath)) {
-                    await fs.remove(tempPath);
-                    this._logInfo(`Removed temporary sync file ${tempPath}`);
+
+            // Crea un file temporaneo
+            const tempPath = `${currentStateDBPath}.temp`;
+            await fs.writeFile(tempPath, driveContent);
+            this._logInfo(`Contenuto scritto nel file temporaneo ${tempPath}`);
+
+            if (replacementMethod === "replace") {
+                try {
+                    // Quando VS Code è chiuso, sposta il file temporaneo al posto dell'originale
+                    const stateDBWatcher = new StateDBWatcher(tempPath, currentStateDBPath);
+                    stateDBWatcher.scheduleReplacementWhenClosed();
+                    this._logInfo(`La sostituzione è programmata per quando VS Code verrà chiuso`);
+
+                    // Informa l'utente che la sostituzione avverrà alla chiusura di VS Code
+                    vscode.window.showInformationMessage(
+                        "La sostituzione completa di state.vscdb avverrà quando chiuderai VS Code."
+                    );
+                } catch (error) {
+                    this._logError(`Errore durante la preparazione della sostituzione: ${error.message}`);
+
+                    // Rimuovi il file temporaneo in caso di errore
+                    if (fs.existsSync(tempPath)) {
+                        await fs.remove(tempPath);
+                    }
+
+                    throw error;
+                }
+            } else {
+                // Use StateDBManager to merge the databases
+                try {
+                    const stateDBManager = StateDBManager.create();
+                    await stateDBManager.mergeStateDB(tempPath);
+                    this._logInfo(`Merge di state.vscdb completato con successo`);
+                }
+                catch (mergeError) {
+                    this._logError(`Errore durante il merge di state.vscdb: ${mergeError.message}`);
+                    throw mergeError;
+                }
+                finally {
+                    // Remove the temporary file
+                    if (fs.existsSync(tempPath)) {
+                        await fs.remove(tempPath);
+                        this._logInfo(`File temporaneo rimosso: ${tempPath}`);
+                    }
                 }
             }
         }
         catch (error) {
-            this._logError("Failed to replace state.vscdb:", error);
+            this._logError("Impossibile gestire state.vscdb:", error);
             throw error;
         }
     }

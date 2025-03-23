@@ -94,7 +94,13 @@
                     "syncing.pokaYokeThreshold": {
                         "type": "number",
                         "default": 10,
-                        "description": "%configuration.syncing.pokaYokeThreshold%"
+                        "description": "Confirm synchronization when changes exceed this percentage."
+                    },
+                    "syncing.statedb.replacementMethod": {
+                        "type": "string",
+                        "enum": ["replace", "merge"],
+                        "default": "merge",
+                        "description": "Method to use when synchronizing state.vscdb: 'replace' for complete replacement (when VSCode is closed) or 'merge' for merging current and downloaded states."
                     },
                     "syncing.separateKeybindings": {
                         "type": "boolean",
